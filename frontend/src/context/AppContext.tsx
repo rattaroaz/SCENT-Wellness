@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { api, setToken } from "@/lib/api";
+import { clientLogger, setClientLogContext, clearClientLogField } from "@/lib/logger";
 import type {
   ActivityTreePatient,
   Campaign,
@@ -71,7 +72,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const res = await api<{ patients: ActivityTreePatient[] }>("/activity/tree");
       setActivityTree(res.patients ?? []);
     } catch (err) {
-      console.error("activity tree refresh failed", err);
+      clientLogger.warn("activity tree refresh failed", { err: String(err) });
       setActivityTree([]);
     }
   }, []);
@@ -85,7 +86,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setCompletedThreads(res.threads ?? []);
       setThreadRetentionDays(res.retentionDays ?? 30);
     } catch (err) {
-      console.error("completed threads refresh failed", err);
+      clientLogger.warn("completed threads refresh failed", { err: String(err) });
       setCompletedThreads([]);
     }
   }, []);
@@ -185,15 +186,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
     setToken(res.token);
     setUser(res.user);
+    setClientLogContext({ userId: res.user.id, role: res.user.role });
+    clientLogger.info("user logged in", { userId: res.user.id });
   };
 
   const logout = () => {
+    clientLogger.info("user logged out", { userId: user?.id });
     setToken(null);
     setUser(null);
     setPatient(null);
     setCampaign(null);
     setActivityTree([]);
     setCompletedThreads([]);
+    clearClientLogField("userId");
+    clearClientLogField("role");
   };
 
   const value = useMemo(

@@ -25,10 +25,14 @@ export async function authRoutes(app: FastifyInstance) {
     });
 
     if (!user || !(await bcrypt.compare(parsed.data.password, user.passwordHash))) {
-      log.warn({ username: parsed.data.username }, "failed login attempt");
+      log.warn(
+        { username: parsed.data.username, reqId: request.id },
+        "failed login attempt"
+      );
       await recordAudit({
         action: "auth.login_failed",
         resource: "auth",
+        reqId: request.id,
         metadata: { username: parsed.data.username },
       });
       return reply.status(401).send({ error: "Invalid username or password" });
@@ -45,10 +49,14 @@ export async function authRoutes(app: FastifyInstance) {
       action: "auth.login",
       resource: "auth",
       resourceId: user.id,
+      reqId: request.id,
       metadata: { role: user.role },
     });
 
-    log.info({ userId: user.id, role: user.role }, "user logged in");
+    log.info(
+      { userId: user.id, role: user.role, reqId: request.id },
+      "user logged in"
+    );
 
     return {
       token,
@@ -61,7 +69,20 @@ export async function authRoutes(app: FastifyInstance) {
     return { user };
   });
 
-  app.post("/auth/logout", async () => {
-    return { ok: true };
-  });
+  app.post(
+    "/auth/logout",
+    { preHandler: [app.authenticate] },
+    async (request) => {
+      const user = requireAuth(request);
+      await recordAudit({
+        userId: user.id,
+        action: "auth.logout",
+        resource: "auth",
+        resourceId: user.id,
+        reqId: request.id,
+      });
+      log.info({ userId: user.id }, "user logged out");
+      return { ok: true };
+    }
+  );
 }

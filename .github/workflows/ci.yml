@@ -34,8 +34,37 @@ jobs:
           DATABASE_URL: file:./test.db
         run: npx tsx prisma/seed.ts
 
-      - name: Backend tests
-        run: npm run test:run --workspace=backend
+      - name: Backend typecheck
+        working-directory: backend
+        run: npx tsc --noEmit
 
-      - name: Frontend tests
-        run: npm run test:run --workspace=frontend
+      - name: Backend tests (with coverage)
+        working-directory: backend
+        env:
+          DATABASE_URL: file:./test.db
+          JWT_SECRET: test-jwt-secret
+        run: npm run test:coverage
+
+      - name: Frontend typecheck
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Frontend tests (with coverage)
+        working-directory: frontend
+        run: npm run test:coverage
+
+      - name: Upload backend coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage
+          retention-days: 7
+
+      - name: Upload frontend coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage
+          retention-days: 7

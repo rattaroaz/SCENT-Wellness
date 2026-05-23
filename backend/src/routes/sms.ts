@@ -72,9 +72,16 @@ export async function smsRoutes(app: FastifyInstance) {
   });
 
   app.get("/sms/physician-config", async (request) => {
-    requireAuth(request);
+    const user = requireAuth(request);
     const configs = await prisma.physicianForward.findMany({
       orderBy: { physicianPhone: "asc" },
+    });
+    await recordAudit({
+      userId: user.id,
+      action: "physician.config.read",
+      resource: "physician_forward",
+      reqId: request.id,
+      metadata: { count: configs.length },
     });
     return { configs };
   });

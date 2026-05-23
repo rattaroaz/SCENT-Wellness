@@ -113,4 +113,72 @@ describe("SMS routes", () => {
     });
     expect(res.statusCode).toBe(401);
   });
+
+  it("POST /sms/simulate/reply rejects invalid payload", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/sms/simulate/reply",
+      headers: getAuthHeader(token),
+      payload: { outboundLogId: "" },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("GET /sms/physician-inbox supports phone filter", async () => {
+    await createOutboundSmsLog({ patientId, campaignId });
+    const replyRes = await app.inject({
+      method: "POST",
+      url: `/sms/simulate/reply`,
+      headers: getAuthHeader(token),
+      payload: {
+        outboundLogId: (
+          await prisma.simulatedSmsLog.findFirstOrThrow({
+            where: { patientId, direction: "OUTBOUND" },
+            orderBy: { createdAt: "desc" },
+          })
+        ).id,
+        answer: "Reply for phone filter test",
+      },
+    });
+    expect(replyRes.statusCode).toBe(200);
+
+    const matching = await app.inject({
+      method: "GET",
+      url: "/sms/physician-inbox?phone=5555555550",
+      headers: getAuthHeader(token),
+    });
+    expect(matching.statusCode).toBe(200);
+    expect(JSON.parse(matching.body).entries.length).toBeGreaterThan(0);
+
+    const nonmatching = await app.inject({
+      method: "GET",
+      url: "/sms/physician-inbox?phone=5559999999",
+      headers: getAuthHeader(token),
+    });
+    expect(JSON.parse(nonmatching.body).entries.length).toBe(0);
+  });
+
+  it("GET /sms/physician-config returns array", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/sms/physician-config",
+      headers: getAuthHeader(token),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(Array.isArray(JSON.parse(res.body).configs)).toBe(true);
+  });
+
+  it("PUT /sms/physician-config/:id rejects non-admin", async () => {
+    const phone = `555${Date.now().toString().slice(-7)}`;
+    const cfg = await prisma.physicianForward.create({
+      data: { physicianPhone: phone, enabled: true, label: "Test" },
+    });
+    const res = await app.inject({
+      method: "PUT",
+      url: `/sms/physician-config/${cfg.id}`,
+      headers: getAuthHeader(token),
+      payload: { physicianPhone: "5557778888" },
+    });
+    expect(res.statusCode).toBe(403);
+  });
 });

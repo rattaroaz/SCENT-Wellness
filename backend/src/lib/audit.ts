@@ -22,19 +22,26 @@ export type AuditAction =
   | "sms.reply"
   | "sms.inbox.read"
   | "physician.config.update"
+  | "physician.config.read"
   | "auth.login"
+  | "auth.logout"
   | "auth.login_failed";
 
-export async function recordAudit(params: {
+export type AuditParams = {
   userId?: string;
   action: AuditAction;
   resource: string;
   resourceId?: string;
+  /** Correlation ID linking the audit row to an HTTP request log entry. */
+  reqId?: string;
   metadata?: Record<string, unknown>;
-}): Promise<void> {
-  const metadataJson = params.metadata
-    ? JSON.stringify(params.metadata)
-  : null;
+};
+
+export async function recordAudit(params: AuditParams): Promise<void> {
+  const metadataPayload = params.reqId
+    ? { ...(params.metadata ?? {}), reqId: params.reqId }
+    : params.metadata;
+  const metadataJson = metadataPayload ? JSON.stringify(metadataPayload) : null;
 
   try {
     await prisma.auditLog.create({
@@ -46,16 +53,20 @@ export async function recordAudit(params: {
         metadata: metadataJson,
       },
     });
-    auditLog.info(
+    auditLog.debug(
       {
         userId: params.userId,
         action: params.action,
         resource: params.resource,
         resourceId: params.resourceId,
+        reqId: params.reqId,
       },
       "audit event recorded"
     );
   } catch (err) {
-    auditLog.error({ err, ...params }, "failed to record audit event");
+    auditLog.error(
+      { err, action: params.action, resource: params.resource, reqId: params.reqId },
+      "failed to record audit event"
+    );
   }
 }

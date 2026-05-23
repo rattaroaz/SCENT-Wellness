@@ -14,7 +14,21 @@ const APP_FROM = "SCENT-App";
 let lastRetentionRun = 0;
 const RETENTION_INTERVAL_MS = 60 * 60 * 1000;
 
-export async function processDueMessages(): Promise<number> {
+/** Test helper: reset the retention cadence so subsequent ticks will run it. */
+export function _resetRetentionCadenceForTests(): void {
+  lastRetentionRun = 0;
+}
+
+export type SchedulerTickResult = {
+  sent: number;
+  failed: number;
+  completed: number;
+  retentionRan: boolean;
+  durationMs: number;
+};
+
+export async function processDueMessages(): Promise<SchedulerTickResult> {
+  const tickStart = Date.now();
   const now = new Date();
   const due = await prisma.scheduledMessage.findMany({
     where: {
@@ -29,6 +43,7 @@ export async function processDueMessages(): Promise<number> {
   });
 
   let sent = 0;
+  let failed = 0;
   for (const msg of due) {
     try {
       const patient = msg.campaign.patient;
@@ -59,10 +74,22 @@ export async function processDueMessages(): Promise<number> {
       );
       sent++;
     } catch (err) {
+      failed++;
       log.error(
         { err, messageId: msg.id, campaignId: msg.campaignId },
         "failed to send scheduled message"
       );
+      try {
+        await prisma.scheduledMessage.update({
+          where: { id: msg.id },
+          data: { status: ScheduledMessageStatus.FAILED },
+        });
+      } catch (markErr) {
+        log.error(
+          { err: markErr, messageId: msg.id },
+          "failed to mark scheduled message as FAILED"
+        );
+      }
     }
   }
 
@@ -71,6 +98,7 @@ export async function processDueMessages(): Promise<number> {
     select: { id: true },
   });
 
+  let completed = 0;
   for (const c of activeCampaigns) {
     try {
       const pending = await prisma.scheduledMessage.count({
@@ -84,6 +112,7 @@ export async function processDueMessages(): Promise<number> {
             completedAt: new Date(),
           },
         });
+        completed++;
         log.info({ campaignId: c.id }, "campaign completed");
       }
     } catch (err) {
@@ -91,22 +120,35 @@ export async function processDueMessages(): Promise<number> {
     }
   }
 
-  if (sent > 0) {
-    log.info({ count: sent }, "batch messages dispatched");
+  if (sent > 0 || failed > 0) {
+    log.info({ sent, failed, completed }, "scheduler batch summary");
   }
 
   const tickMs = Date.now();
+  let retentionRan = false;
   if (tickMs - lastRetentionRun >= RETENTION_INTERVAL_MS) {
     lastRetentionRun = tickMs;
+    retentionRan = true;
     try {
-      await purgeExpiredPatients();
-      await purgeExpiredThreads();
+      const [patients, threads] = await Promise.all([
+        purgeExpiredPatients(),
+        purgeExpiredThreads(),
+      ]);
+      log.info(
+        { patientsPurged: patients, threadsPurged: threads },
+        "retention purge tick"
+      );
     } catch (err) {
       log.error({ err }, "retention purge failed");
     }
   }
 
-  return sent;
+  const durationMs = Date.now() - tickStart;
+  if (durationMs > 1000) {
+    log.warn({ durationMs, sent, failed, completed }, "slow scheduler tick");
+  }
+
+  return { sent, failed, completed, retentionRan, durationMs };
 }
 
 export function startScheduler(intervalMs = 1000): NodeJS.Timeout {

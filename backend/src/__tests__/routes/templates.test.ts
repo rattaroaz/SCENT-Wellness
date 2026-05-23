@@ -86,4 +86,85 @@ describe("Template routes", () => {
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body).template.messages[0].body).toBe("Updated");
   });
+
+  it("POST /templates rejects duplicate name with 409", async () => {
+    const name = `Dup-${Date.now()}`;
+    const first = await app.inject({
+      method: "POST",
+      url: "/templates",
+      headers: getAuthHeader(adminToken),
+      payload: { name, messages: [{ body: "A" }] },
+    });
+    expect(first.statusCode).toBe(200);
+
+    const second = await app.inject({
+      method: "POST",
+      url: "/templates",
+      headers: getAuthHeader(adminToken),
+      payload: { name, messages: [{ body: "B" }] },
+    });
+    expect(second.statusCode).toBe(409);
+  });
+
+  it("GET /templates/:id returns 404 for missing", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/templates/missing",
+      headers: getAuthHeader(adminToken),
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("PUT /templates/:id rejects guest with 403", async () => {
+    const template = await createTestTemplate([{ body: "Orig" }]);
+    const res = await app.inject({
+      method: "PUT",
+      url: `/templates/${template.id}`,
+      headers: getAuthHeader(guestToken),
+      payload: { name: template.name, messages: [{ body: "X" }] },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("PUT /templates/:id rejects duplicate name conflict", async () => {
+    const a = await createTestTemplate([{ body: "A" }]);
+    const b = await createTestTemplate([{ body: "B" }]);
+    const res = await app.inject({
+      method: "PUT",
+      url: `/templates/${b.id}`,
+      headers: getAuthHeader(adminToken),
+      payload: { name: a.name, messages: [{ body: "X" }] },
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it("DELETE /templates/:id removes template", async () => {
+    const template = await createTestTemplate([{ body: "Doomed" }]);
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/templates/${template.id}`,
+      headers: getAuthHeader(adminToken),
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("DELETE /templates/:id rejects guest with 403", async () => {
+    const template = await createTestTemplate([{ body: "Safe" }]);
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/templates/${template.id}`,
+      headers: getAuthHeader(guestToken),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("POST /templates rejects invalid payload", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/templates",
+      headers: getAuthHeader(adminToken),
+      payload: { name: "" },
+    });
+    expect(res.statusCode).toBe(400);
+  });
 });
