@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  USER
+  GUEST
+}
+
+enum CampaignStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum ScheduledMessageStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum SmsDirection {
+  OUTBOUND
+  INBOUND
+}
+
+model User {
+  id           String              @id @default(cuid())
+  username     String              @unique
+  role         Role
+  passwordHash String
+  createdAt    DateTime            @default(now())
+  templates    ProcedureTemplate[]
+}
+
+model Patient {
+  id          String            @id @default(cuid())
+  lastName    String
+  firstName   String
+  dateOfBirth String
+  mrn         String            @unique
+  cellPhone   String
+  createdAt   DateTime          @default(now())
+  campaigns   ActiveCampaign[]
+  smsLogs     SimulatedSmsLog[]
+}
+
+model ProcedureTemplate {
+  id              String            @id @default(cuid())
+  name            String            @unique
+  createdByUserId String?
+  createdBy       User?             @relation(fields: [createdByUserId], references: [id])
+  messages        TemplateMessage[]
+  campaigns       ActiveCampaign[]
+}
+
+model TemplateMessage {
+  id         String             @id @default(cuid())
+  templateId String
+  template   ProcedureTemplate  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  sortOrder  Int
+  body       String
+  weeks      Int                @default(0)
+  days       Int                @default(0)
+  hours      Int                @default(0)
+  minutes    Int                @default(0)
+  seconds    Int                @default(0)
+  scheduled  ScheduledMessage[]
+}
+
+model ActiveCampaign {
+  id         String             @id @default(cuid())
+  patientId  String
+  patient    Patient            @relation(fields: [patientId], references: [id])
+  templateId String
+  template   ProcedureTemplate  @relation(fields: [templateId], references: [id])
+  status     CampaignStatus     @default(ACTIVE)
+  startedAt  DateTime           @default(now())
+  scheduled  ScheduledMessage[]
+  smsLogs    SimulatedSmsLog[]
+}
+
+model ScheduledMessage {
+  id                String                 @id @default(cuid())
+  campaignId        String
+  campaign          ActiveCampaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  templateMessageId String
+  templateMessage   TemplateMessage        @relation(fields: [templateMessageId], references: [id])
+  sendAt            DateTime
+  sentAt            DateTime?
+  status            ScheduledMessageStatus @default(PENDING)
+  body              String
+}
+
+model SimulatedSmsLog {
+  id                  String                  @id @default(cuid())
+  direction           SmsDirection
+  fromNumber          String
+  toNumber            String
+  body                String
+  patientId           String?
+  patient             Patient?                @relation(fields: [patientId], references: [id])
+  campaignId          String?
+  campaign            ActiveCampaign?         @relation(fields: [campaignId], references: [id])
+  replyToLogId        String?
+  replyTo             SimulatedSmsLog?        @relation("ReplyChain", fields: [replyToLogId], references: [id])
+  replies             SimulatedSmsLog[]     @relation("ReplyChain")
+  questionMessage     String?
+  createdAt           DateTime                @default(now())
+  physicianForwards   PhysicianForwardEntry[]
+}
+
+model PhysicianForward {
+  id             String  @id @default(cuid())
+  physicianPhone String
+  enabled        Boolean @default(true)
+}
+
+model PhysicianForwardEntry {
+  id              String           @id @default(cuid())
+  lastName        String
+  firstName       String
+  dateOfBirth     String
+  mrn             String
+  questionMessage String
+  patientAnswer   String
+  inboundLogId    String?
+  inboundLog      SimulatedSmsLog? @relation(fields: [inboundLogId], references: [id])
+  createdAt       DateTime         @default(now())
+}

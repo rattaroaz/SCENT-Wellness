@@ -1,0 +1,87 @@
+SCENT Wellness portal
+
+requirements: 
+authentication:  admin, guest
+guest can only input not create templates.
+
+patient name, dob, cell phone, medical record number
+
+template:  procedure name, messages, countdown time in sec, minutes, days, weeks.
+
+send messesage.  receive text.  add patient name, dob, mrn, and forward patient info with last question and answer.
+
+Patient phone number:  send texts.  
+database save algorithm
+
+sms feature.  for now mimic a sms text
+text api - doximity? 
+closed ended questions.  yes or no.  if yes, send message to office.
+"goto" phone sms system.
+
+set algorithm for post op.  Sent in scheduled order. same day, day 1, day 2.
+
+1. Interactive Patient Care (IPC) Pathways
+Guided, personalized care pathways delivered via bedside TV, mobile, or web.
+
+Supports patient education, self‑management, and care plan adherence.
+
+2. Large Patient Education Content Library
+Extensive clinical education modules and multimedia content.
+
+Designed to improve comprehension and reduce readmissions.
+
+3. Digital Rounding & Surveys (GetWell Rounds+)
+Customizable rounding workflows.
+
+Real‑time patient feedback collection and service recovery tools.
+
+4. Automated Communication & Reminders
+Automated outreach for follow‑ups, care transitions, and appointment reminders.
+
+5. Telehealth & Virtual Care
+Integrated virtual visits and remote engagement capabilities.
+
+6. Deep EHR Integration
+Integrates with Epic, Cerner, MEDITECH, Allscripts, and more.
+
+Syncs patient data, orders, education, and care plans.
+
+7. Whole‑Health, Cross‑Continuum Engagement (Get Well 360)
+Supports inpatient, outpatient, community, and home‑based care.
+
+Includes population health management and member engagement for health plans.
+
+8. SmartRoom & Hospital Journey Manager
+In‑hospital digital experience: education, entertainment, care instructions, and service requests.
+
+End‑to‑end patient support from admission through discharge.
+
+9. Government & VA‑Specific Capabilities
+FedRAMP‑certified, GovCloud‑integrated.
+
+VistA integration for scheduling, pharmacy info, diet selection, pain management, etc.
+
+10. Pediatric Solutions
+Age‑appropriate education, anxiety‑reducing content, and caregiver tools.
+
+
+create a roadmap.txt file and document in it all the needed steps to create the following app.  
+Organize the steps in phases, with todo items in each phase.  Add checkboxes next to the items todo.
+Create an application that sends texts to patients at given intervals, and receives texts back, and forwards them to particular sms text numbers.
+This app is to be written in typescript, and use next.js for the frontend, and use fastify + prisma + sqlite for the backend.
+There should be a login system with users:  admin and user.  default passwords are:  password
+Once the user logs in, the screen with have 3 panes:  left side, center, lower.
+On the side panel, have clickable options:  Patient, Messages, Templates.
+When clicking on Patient, the center will display fields:  Last Name, First Name, Date of birth, MRN, cell phone, submit, search with search box.
+If clicking submit or the user selects an existing patient, that information will be send to the Messages option automatically.
+when clicking on Messages, the center will display the patient information, and drop down of procedure template. There will be a submit button to start the messaging system.
+When clicking on Templates, the options will be drop down procedure name (where the user can select of type in), followed by a vertical list of 5 input textboxes, with the label 'Message', with the ability to add more.
+next to every input textbox on the right are columns labeled: weeks, days, hours, minutes, seconds.  then there is a save button.This way the user can save a new template or edit an existing one.
+Under messages, when the user clicks submit, the countdown timer will send the messages to the cell phone according to the time listed next to the message.
+In the lower pane, that is the sms text simulator, and will be separated in 2 panels.  in the left panel, it will simulate an sms text send from the app to the patient's cell phone.  There will be a reply option.
+in the right lower panel, the system will emulate the receipt of the patient message to the physician number.
+When the patient replies, the system will automatically add the patient last name, first name, date of birth, mrn, the message to which the patient replied and finally the patient answer.
+
+web app vs desktop
+platform to use
+steps to use

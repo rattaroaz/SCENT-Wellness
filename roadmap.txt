@@ -1,0 +1,138 @@
+SCENT Wellness — Patient SMS Messaging Application
+Roadmap (Next.js frontend + Fastify/Prisma/SQLite backend)
+
+Reference: todo.txt lines 68–84
+
+================================================================================
+PHASE 0 — Project foundation & monorepo
+================================================================================
+- [x] Create monorepo root with `frontend/` and `backend/` folders
+- [x] Add root `package.json` with npm/pnpm workspaces linking frontend and backend
+- [x] Add shared TypeScript base config (paths, strict mode) at repo root
+- [x] Add `.gitignore` (node_modules, .env, SQLite DB, build output)
+- [x] Add `.env.example` for backend (PORT, JWT_SECRET, DATABASE_URL)
+- [x] Document local dev: install deps, migrate DB, run both servers in README
+
+================================================================================
+PHASE 1 — Backend: Fastify + Prisma + SQLite
+================================================================================
+- [x] Initialize backend: TypeScript, Fastify, `@fastify/cors`, `@fastify/jwt` (or cookie session)
+- [x] Add Prisma with SQLite datasource and `prisma/schema.prisma`
+- [x] Define models:
+      - User (id, username, role: ADMIN | USER, passwordHash)
+      - Patient (id, lastName, firstName, dateOfBirth, mrn, cellPhone, createdAt)
+      - ProcedureTemplate (id, name, createdByUserId, guestReadOnly flag if needed)
+      - TemplateMessage (id, templateId, sortOrder, body, weeks, days, hours, minutes, seconds)
+      - ActiveCampaign (id, patientId, templateId, status, startedAt)
+      - ScheduledMessage (id, campaignId, templateMessageId, sendAt, sentAt, status)
+      - SimulatedSmsLog (id, direction, from, to, body, patientId, campaignId, replyToMessageId)
+      - PhysicianForward (id, physicianPhone, enabled) — config for forward targets
+- [x] Seed database: admin/user accounts with default password `password` (bcrypt hashed)
+- [x] Auth routes: POST `/auth/login`, POST `/auth/logout`, GET `/auth/me`
+- [x] Role middleware: admin full access; user standard; guest read-only templates (per todo lines 4–6)
+- [x] Patient CRUD + search: GET `/patients?query=`, POST `/patients`, GET `/patients/:id`
+- [x] Template CRUD: GET/POST/PUT `/templates`, GET `/templates/:id` with nested messages
+- [x] Campaign start: POST `/campaigns` (patientId + templateId) → create scheduled messages from offsets
+- [x] Scheduler service: interval/cron job that marks due messages and emits to SMS simulator API
+- [x] Inbound simulated reply: POST `/sms/simulate/reply` → log + build physician forward payload
+- [x] Physician forward: POST `/sms/forward` or append to right-panel feed via GET `/sms/physician-inbox`
+- [x] Health check: GET `/health`
+
+================================================================================
+PHASE 2 — Frontend: Next.js shell, auth, 3-pane layout
+================================================================================
+- [x] Initialize Next.js (App Router) in `frontend/` with TypeScript and Tailwind (or CSS modules)
+- [x] Login page: username + password; roles admin/user; redirect to main app on success
+- [x] API client module (fetch + credentials) pointing at backend base URL
+- [x] Auth context / middleware: protect `/app` routes; expose role for UI restrictions
+- [x] Main app layout after login:
+      - Left pane: nav buttons Patient | Messages | Templates
+      - Center pane: dynamic content by selection
+      - Lower pane: SMS simulator (always visible)
+- [x] Global state (Context or Zustand): selected patient, active nav, active campaign, simulator feeds
+
+================================================================================
+PHASE 3 — Patient pane (center)
+================================================================================
+- [x] Form fields: Last Name, First Name, Date of Birth, MRN, Cell Phone
+- [x] Submit: create or update patient via API; on success store patient in global state
+- [x] Search box: debounced query to `/patients?query=`; list results selectable
+- [x] On select or submit success: auto-switch nav to Messages and pass patient context
+
+================================================================================
+PHASE 4 — Templates pane (center)
+================================================================================
+- [x] Procedure name dropdown (existing templates) + free-text/type-in for new name
+- [x] Vertical list of message rows (default 5); “Add message” appends more rows
+- [x] Each row: Message text input + columns weeks, days, hours, minutes, seconds
+- [x] Load existing template into form on dropdown select
+- [x] Save button: POST or PUT template with all message rows and offsets
+- [x] Guest role: disable create/edit; view-only where required
+
+================================================================================
+PHASE 5 — Messages pane (center)
+================================================================================
+- [x] Display read-only patient summary from global state (require patient selected)
+- [x] Procedure template dropdown populated from API
+- [x] Submit: start campaign (POST `/campaigns`); show confirmation and active status
+- [x] Show countdown / next-send preview per scheduled message (poll or WebSocket later)
+- [x] Link scheduled sends to lower-left simulator when backend marks message sent
+
+================================================================================
+PHASE 6 — SMS simulator (lower pane, two panels)
+================================================================================
+Lower pane split 50/50:
+
+Left panel — patient phone simulator
+- [x] List outbound messages “to patient cell” with timestamps
+- [x] Reply control per message (or global reply box): POST simulated patient reply
+- [x] Visual thread styling (bubble UI)
+
+Right panel — physician number simulator
+- [x] List inbound forwards when patient replies
+- [x] Auto-format each entry: Last Name, First Name, DOB, MRN, question message, patient answer
+- [x] Configure physician destination number(s) in settings (admin)
+
+================================================================================
+PHASE 7 — Scheduling & countdown engine
+================================================================================
+- [x] Convert template offsets (weeks/days/hours/minutes/seconds) to absolute `sendAt` from campaign start
+- [x] Backend worker ticks every N seconds; find `ScheduledMessage` where `sendAt <= now` and `sentAt` null
+- [x] On send: write SimulatedSmsLog (OUTBOUND), update status, notify frontend (poll SSE or short poll)
+- [x] Frontend countdown display per pending message (time until sendAt)
+- [x] Handle campaign pause/cancel (stretch)
+
+================================================================================
+PHASE 8 — Reply routing & closed-ended questions (stretch from todo)
+================================================================================
+- [ ] Store which template message prompted each outbound send
+- [ ] On reply, associate replyToMessageId and include original question text in physician panel
+- [ ] Optional yes/no detection on reply; if yes, trigger extra forward to office number
+- [ ] “Goto” phone SMS routing table (multiple forward numbers by rule)
+
+================================================================================
+PHASE 9 — Data persistence & algorithms
+================================================================================
+- [ ] Persist all patients, templates, campaigns, logs in SQLite via Prisma
+- [ ] Idempotent campaign start (prevent duplicate active campaigns per patient+template)
+- [ ] Database save algorithm documented in code comments / README
+- [ ] Export audit log (admin) — stretch
+
+================================================================================
+PHASE 10 — Production readiness
+================================================================================
+- [ ] Input validation (Zod) on backend routes and frontend forms
+- [ ] Error boundaries and user-visible API error messages
+- [ ] Security: hash passwords, HTTP-only cookies or secure JWT, rate-limit login
+- [ ] E2E tests: login → patient → template → start campaign → simulated reply → physician panel
+- [ ] Replace simulator with real SMS provider (Twilio, etc.) behind adapter interface
+- [ ] Environment-based config; no secrets in repo
+- [ ] Build scripts: `frontend` static/SSR build, `backend` compile and migrate on deploy
+- [ ] CI: lint, typecheck, test on push
+ 
+================================================================================
+Suggested implementation order
+================================================================================
+0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 9 → 10 → 8 (reply rules) → 11 (later)
+
+Default credentials (dev only): admin/password, user/password — change before production.
