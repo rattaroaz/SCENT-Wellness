@@ -42,6 +42,7 @@ export type ScheduledMessage = {
 
 export type Campaign = {
   id: string;
+  physicianPhone: string;
   status: "ACTIVE" | "COMPLETED" | "CANCELLED";
   startedAt: string;
   patient: Patient;
@@ -62,6 +63,7 @@ export type SmsLog = {
 
 export type PhysicianEntry = {
   id: string;
+  physicianPhone: string;
   lastName: string;
   firstName: string;
   dateOfBirth: string;

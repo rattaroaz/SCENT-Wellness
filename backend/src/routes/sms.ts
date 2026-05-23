@@ -3,6 +3,12 @@ import { Role, SmsDirection } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { requireAuth } from "../lib/auth";
+import {
+  DEFAULT_PHYSICIAN_PHONE,
+  formatPhysicianSmsBody,
+  normalizePhone,
+  phonesMatch,
+} from "../lib/physicianPhones";
 
 const replySchema = z.object({
   outboundLogId: z.string(),
@@ -12,6 +18,7 @@ const replySchema = z.object({
 const physicianSchema = z.object({
   physicianPhone: z.string().min(1),
   enabled: z.boolean().optional(),
+  label: z.string().optional(),
 });
 
 export async function smsRoutes(app: FastifyInstance) {
@@ -36,16 +43,27 @@ export async function smsRoutes(app: FastifyInstance) {
 
   app.get("/sms/physician-inbox", async (request) => {
     requireAuth(request);
+    const phone = (request.query as { phone?: string }).phone;
+
     const entries = await prisma.physicianForwardEntry.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 100,
+      orderBy: { createdAt: "asc" },
+      take: 300,
     });
+
+    if (phone) {
+      return {
+        entries: entries.filter((e) => phonesMatch(e.physicianPhone, phone)),
+      };
+    }
+
     return { entries };
   });
 
   app.get("/sms/physician-config", async (request) => {
     requireAuth(request);
-    const configs = await prisma.physicianForward.findMany();
+    const configs = await prisma.physicianForward.findMany({
+      orderBy: { physicianPhone: "asc" },
+    });
     return { configs };
   });
 
@@ -64,8 +82,9 @@ export async function smsRoutes(app: FastifyInstance) {
     const config = await prisma.physicianForward.update({
       where: { id },
       data: {
-        physicianPhone: parsed.data.physicianPhone,
+        physicianPhone: normalizePhone(parsed.data.physicianPhone),
         enabled: parsed.data.enabled ?? true,
+        label: parsed.data.label,
       },
     });
 
@@ -88,22 +107,28 @@ export async function smsRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: "Outbound message not found" });
     }
 
-    const physician = await prisma.physicianForward.findFirst({
-      where: { enabled: true },
-    });
-
-    const physicianPhone = physician?.physicianPhone ?? "+15550000000";
     const patient = outbound.patient;
-    const questionMessage =
-      outbound.questionMessage ?? outbound.body;
+    const targetPhone = normalizePhone(
+      outbound.campaign?.physicianPhone || DEFAULT_PHYSICIAN_PHONE
+    );
+    const questionMessage = outbound.questionMessage ?? outbound.body;
+    const forwardPayload = {
+      lastName: patient.lastName,
+      firstName: patient.firstName,
+      dateOfBirth: patient.dateOfBirth,
+      mrn: patient.mrn,
+      questionMessage,
+      patientAnswer: parsed.data.answer,
+    };
+    const smsBody = formatPhysicianSmsBody(forwardPayload);
 
     const result = await prisma.$transaction(async (tx) => {
       const inbound = await tx.simulatedSmsLog.create({
         data: {
           direction: SmsDirection.INBOUND,
           fromNumber: patient.cellPhone,
-          toNumber: physicianPhone,
-          body: parsed.data.answer,
+          toNumber: targetPhone,
+          body: smsBody,
           patientId: patient.id,
           campaignId: outbound.campaignId,
           replyToLogId: outbound.id,
@@ -113,12 +138,8 @@ export async function smsRoutes(app: FastifyInstance) {
 
       const forward = await tx.physicianForwardEntry.create({
         data: {
-          lastName: patient.lastName,
-          firstName: patient.firstName,
-          dateOfBirth: patient.dateOfBirth,
-          mrn: patient.mrn,
-          questionMessage,
-          patientAnswer: parsed.data.answer,
+          physicianPhone: targetPhone,
+          ...forwardPayload,
           inboundLogId: inbound.id,
         },
       });

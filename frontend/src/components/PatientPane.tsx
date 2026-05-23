@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useApp } from "@/context/AppContext";
+import { formatPhoneDisplay, formatPhoneInput, digitsOnly } from "@/lib/phoneFormat";
 import type { Patient } from "@/lib/types";
 
 export function PatientPane() {
@@ -38,7 +39,7 @@ export function PatientPane() {
       firstName: p.firstName,
       dateOfBirth: p.dateOfBirth,
       mrn: p.mrn,
-      cellPhone: p.cellPhone,
+      cellPhone: formatPhoneDisplay(p.cellPhone),
     });
     setPatient(p);
     setNav("messages");
@@ -51,7 +52,10 @@ export function PatientPane() {
     try {
       const res = await api<{ patient: Patient }>("/patients", {
         method: "POST",
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          cellPhone: digitsOnly(form.cellPhone),
+        }),
       });
       setPatient(res.patient);
       setNav("messages");
@@ -82,7 +86,18 @@ export function PatientPane() {
               required
               className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm"
               value={form[key]}
-              onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  [key]:
+                    key === "cellPhone"
+                      ? formatPhoneInput(e.target.value)
+                      : e.target.value,
+                })
+              }
+              {...(key === "cellPhone"
+                ? { type: "tel", maxLength: 12, placeholder: "555-555-5555" }
+                : {})}
             />
           </div>
         ))}

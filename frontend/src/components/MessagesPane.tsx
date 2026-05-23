@@ -4,19 +4,48 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useApp } from "@/context/AppContext";
 import { formatCountdown } from "@/lib/countdown";
+import { formatPhoneDisplay, formatPhoneInput } from "@/lib/phoneFormat";
+import {
+  DEFAULT_PHYSICIAN_PHONE,
+  normalizePhone,
+  PHYSICIAN_PHONES,
+} from "@/lib/physicianPhones";
+import {
+  loadPhysicianPhonePreference,
+  savePhysicianPhonePreference,
+} from "@/lib/physicianPhonePreference";
 import type { Campaign, ProcedureTemplate } from "@/lib/types";
 
 export function MessagesPane() {
   const { patient, templates, campaign, setCampaign, refreshSms } = useApp();
   const [templateId, setTemplateId] = useState("");
+  const [physicianPhone, setPhysicianPhone] = useState(
+    formatPhoneDisplay(DEFAULT_PHYSICIAN_PHONE)
+  );
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(false);
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
+    setPhysicianPhone(loadPhysicianPhonePreference());
+  }, []);
+
+  useEffect(() => {
+    if (campaign?.physicianPhone) {
+      setPhysicianPhone(formatPhoneDisplay(campaign.physicianPhone));
+    }
+  }, [campaign?.id, campaign?.physicianPhone]);
+
+  useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  function handlePhysicianPhoneChange(value: string) {
+    const formatted = formatPhoneInput(value);
+    setPhysicianPhone(formatted);
+    savePhysicianPhonePreference(formatted);
+  }
 
   if (!patient) {
     return (
@@ -32,6 +61,11 @@ export function MessagesPane() {
       setError("Select a procedure template");
       return;
     }
+    const phone = normalizePhone(physicianPhone);
+    if (phone.length < 7) {
+      setError("Enter a valid physician SMS number (at least 7 digits)");
+      return;
+    }
     setError("");
     setStarting(true);
     try {
@@ -42,10 +76,12 @@ export function MessagesPane() {
           body: JSON.stringify({
             patientId: patient.id,
             templateId,
+            physicianPhone: phone,
           }),
         }
       );
       setCampaign(res.campaign);
+      savePhysicianPhonePreference(phone);
       await refreshSms();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start");
@@ -85,8 +121,35 @@ export function MessagesPane() {
           <span className="font-medium">MRN:</span> {patient.mrn}
         </p>
         <p>
-          <span className="font-medium">Phone:</span> {patient.cellPhone}
+          <span className="font-medium">Phone:</span>{" "}
+          {formatPhoneDisplay(patient.cellPhone)}
         </p>
+      </div>
+
+      <div className="mt-4 max-w-md">
+        <label className="text-sm font-medium">Physician SMS number</label>
+        <p className="mt-0.5 text-xs text-slate-500">
+          Patient replies are forwarded to this number.           Default:{" "}
+          {formatPhoneDisplay(DEFAULT_PHYSICIAN_PHONE)}
+        </p>
+        <input
+          type="tel"
+          inputMode="numeric"
+          autoComplete="tel"
+          className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm"
+          value={physicianPhone}
+          onChange={(e) => handlePhysicianPhoneChange(e.target.value)}
+          placeholder={formatPhoneDisplay(DEFAULT_PHYSICIAN_PHONE)}
+          list="physician-phone-suggestions"
+          maxLength={12}
+        />
+        <datalist id="physician-phone-suggestions">
+          {PHYSICIAN_PHONES.map((line) => (
+            <option key={line.number} value={formatPhoneDisplay(line.number)}>
+              {line.label}
+            </option>
+          ))}
+        </datalist>
       </div>
 
       <div className="mt-4 max-w-md">

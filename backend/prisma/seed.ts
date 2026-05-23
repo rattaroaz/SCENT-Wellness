@@ -1,5 +1,6 @@
 import { PrismaClient, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { PHYSICIAN_PHONES } from "../src/lib/physicianPhones";
 
 const prisma = new PrismaClient();
 
@@ -20,14 +21,22 @@ async function main() {
     });
   }
 
-  const existing = await prisma.physicianForward.count();
-  if (existing === 0) {
-    await prisma.physicianForward.create({
-      data: { physicianPhone: "+15551234567", enabled: true },
+  const labels = ["Physician Line 1", "Physician Line 2", "Physician Line 3"];
+  for (let i = 0; i < PHYSICIAN_PHONES.length; i++) {
+    const physicianPhone = PHYSICIAN_PHONES[i];
+    await prisma.physicianForward.upsert({
+      where: { physicianPhone },
+      update: { enabled: true, label: labels[i] },
+      create: {
+        physicianPhone,
+        label: labels[i],
+        enabled: true,
+      },
     });
   }
 
   console.log("Seeded users: admin, user, guest (password: password)");
+  console.log("Seeded physician phones:", PHYSICIAN_PHONES.join(", "));
 }
 
 main()

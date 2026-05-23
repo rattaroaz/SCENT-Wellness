@@ -75,15 +75,16 @@ model TemplateMessage {
 }
 
 model ActiveCampaign {
-  id         String             @id @default(cuid())
-  patientId  String
-  patient    Patient            @relation(fields: [patientId], references: [id])
-  templateId String
-  template   ProcedureTemplate  @relation(fields: [templateId], references: [id])
-  status     CampaignStatus     @default(ACTIVE)
-  startedAt  DateTime           @default(now())
-  scheduled  ScheduledMessage[]
-  smsLogs    SimulatedSmsLog[]
+  id             String             @id @default(cuid())
+  patientId      String
+  patient        Patient            @relation(fields: [patientId], references: [id])
+  templateId     String
+  template       ProcedureTemplate  @relation(fields: [templateId], references: [id])
+  physicianPhone String             @default("5555555550")
+  status         CampaignStatus     @default(ACTIVE)
+  startedAt      DateTime           @default(now())
+  scheduled      ScheduledMessage[]
+  smsLogs        SimulatedSmsLog[]
 }
 
 model ScheduledMessage {
@@ -118,12 +119,14 @@ model SimulatedSmsLog {
 
 model PhysicianForward {
   id             String  @id @default(cuid())
-  physicianPhone String
+  physicianPhone String  @unique
+  label          String?
   enabled        Boolean @default(true)
 }
 
 model PhysicianForwardEntry {
   id              String           @id @default(cuid())
+  physicianPhone  String
   lastName        String
   firstName       String
   dateOfBirth     String
@@ -133,4 +136,6 @@ model PhysicianForwardEntry {
   inboundLogId    String?
   inboundLog      SimulatedSmsLog? @relation(fields: [inboundLogId], references: [id])
   createdAt       DateTime         @default(now())
+
+  @@index([physicianPhone])
 }

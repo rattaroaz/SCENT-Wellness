@@ -4,10 +4,12 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { computeSendAt } from "../lib/time";
 import { requireAuth } from "../lib/auth";
+import { DEFAULT_PHYSICIAN_PHONE, normalizePhone } from "../lib/physicianPhones";
 
 const startSchema = z.object({
   patientId: z.string(),
   templateId: z.string(),
+  physicianPhone: z.string().min(7).optional(),
 });
 
 export async function campaignRoutes(app: FastifyInstance) {
@@ -83,11 +85,15 @@ export async function campaignRoutes(app: FastifyInstance) {
     }
 
     const startedAt = new Date();
+    const physicianPhone = normalizePhone(
+      parsed.data.physicianPhone?.trim() || DEFAULT_PHYSICIAN_PHONE
+    );
 
     const campaign = await prisma.activeCampaign.create({
       data: {
         patientId: parsed.data.patientId,
         templateId: parsed.data.templateId,
+        physicianPhone,
         status: CampaignStatus.ACTIVE,
         startedAt,
         scheduled: {
