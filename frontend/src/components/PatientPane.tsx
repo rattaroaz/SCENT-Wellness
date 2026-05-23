@@ -7,7 +7,8 @@ import { formatPhoneDisplay, formatPhoneInput, digitsOnly } from "@/lib/phoneFor
 import type { Patient } from "@/lib/types";
 
 export function PatientPane() {
-  const { setPatient, setNav } = useApp();
+  const { setPatient, setNav, refreshActivityTree, canManagePatients, deletePatient } =
+    useApp();
   const [form, setForm] = useState({
     lastName: "",
     firstName: "",
@@ -58,6 +59,7 @@ export function PatientPane() {
         }),
       });
       setPatient(res.patient);
+      await refreshActivityTree();
       setNav("messages");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
@@ -69,6 +71,9 @@ export function PatientPane() {
   return (
     <div className="p-6">
       <h2 className="text-lg font-semibold text-brand-700">Patient</h2>
+      <p className="mt-1 text-xs text-slate-500">
+        Records are kept for 30 days, then removed automatically.
+      </p>
 
       <form onSubmit={handleSubmit} className="mt-4 grid max-w-xl gap-3">
         {(
@@ -125,14 +130,32 @@ export function PatientPane() {
         />
         <ul className="mt-2 max-w-xl divide-y rounded-lg border border-slate-200 bg-white">
           {results.map((p) => (
-            <li key={p.id}>
+            <li key={p.id} className="flex items-center">
               <button
                 type="button"
-                className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+                className="min-w-0 flex-1 px-3 py-2 text-left text-sm hover:bg-slate-50"
                 onClick={() => selectPatient(p)}
               >
                 {p.lastName}, {p.firstName} — MRN {p.mrn}
               </button>
+              {canManagePatients && (
+                <button
+                  type="button"
+                  className="shrink-0 px-2 text-xs text-red-600 hover:bg-red-50"
+                  onClick={async () => {
+                    if (
+                      confirm(
+                        `Delete ${p.lastName}, ${p.firstName}? This cannot be undone.`
+                      )
+                    ) {
+                      await deletePatient(p.id);
+                      setResults((prev) => prev.filter((x) => x.id !== p.id));
+                    }
+                  }}
+                >
+                  Delete
+                </button>
+              )}
             </li>
           ))}
           {search && results.length === 0 && (

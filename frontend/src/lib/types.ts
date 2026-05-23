@@ -13,6 +13,7 @@ export type Patient = {
   dateOfBirth: string;
   mrn: string;
   cellPhone: string;
+  createdAt?: string;
 };
 
 export type TemplateMessage = {
@@ -45,9 +46,17 @@ export type Campaign = {
   physicianPhone: string;
   status: "ACTIVE" | "COMPLETED" | "CANCELLED";
   startedAt: string;
-  patient: Patient;
-  template: ProcedureTemplate;
+  completedAt?: string | null;
+  patient?: Patient;
+  template: Pick<ProcedureTemplate, "id" | "name"> & {
+    messages?: TemplateMessage[];
+  };
   scheduled: ScheduledMessage[];
+};
+
+export type CompletedThread = Campaign & {
+  patient: Patient;
+  completedAt: string;
 };
 
 export type SmsLog = {
@@ -73,4 +82,8 @@ export type PhysicianEntry = {
   createdAt: string;
 };
 
-export type NavSection = "patient" | "messages" | "templates";
+export type ActivityTreePatient = Patient & {
+  campaigns: Campaign[];
+};
+
+export type NavSection = "patient" | "threads" | "messages" | "templates";

@@ -179,4 +179,30 @@ export async function templateRoutes(app: FastifyInstance) {
     log.info({ userId: user.id, templateId: id }, "template updated");
     return { template };
   });
+
+  app.delete("/templates/:id", async (request, reply) => {
+    const user = requireAuth(request);
+    if (!canEditTemplates(user.role)) {
+      return reply.status(403).send({ error: "Guests cannot delete templates" });
+    }
+
+    const { id } = request.params as { id: string };
+    const found = await prisma.procedureTemplate.findUnique({ where: { id } });
+    if (!found) {
+      return reply.status(404).send({ error: "Template not found" });
+    }
+
+    await prisma.procedureTemplate.delete({ where: { id } });
+
+    await recordAudit({
+      userId: user.id,
+      action: "template.delete",
+      resource: "template",
+      resourceId: id,
+      metadata: { name: found.name },
+    });
+
+    log.info({ userId: user.id, templateId: id }, "template deleted");
+    return { ok: true };
+  });
 }

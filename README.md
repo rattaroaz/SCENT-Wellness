@@ -46,7 +46,8 @@ npm run dev:frontend
 | `npm run dev` does nothing (PowerShell) | Run `npm install` at root, then `npm run dev` again |
 | Login fails / API errors | Ensure backend is on port **3001**: `npm run dev:backend` |
 | Database errors | `npm run db:generate` then `npm run db:migrate` then `npm run db:seed` |
-| Port already in use | Stop other Node processes or change `PORT` in `backend/.env` |
+| `Fatal startup error` / `EADDRINUSE` on 3001 | Stale backend still running. Run `npm run dev:clean` then `npm run dev`, or use `npm run dev:fresh` |
+| Port already in use | Frontend must stay on **3000**, backend on **3001**. If Next moves to 3001, both collide — run `npm run dev:clean` |
 
 ## Layout
 

@@ -5,10 +5,15 @@ const auditLog = getLogger("audit");
 
 export type AuditAction =
   | "patient.create"
+  | "patient.delete"
+  | "patient.purge"
   | "patient.read"
   | "patient.search"
   | "template.create"
+  | "template.delete"
   | "template.update"
+  | "activity.tree.read"
+  | "activity.completed.read"
   | "template.read"
   | "template.list"
   | "campaign.start"

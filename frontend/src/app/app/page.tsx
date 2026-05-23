@@ -6,9 +6,29 @@ import { useApp } from "@/context/AppContext";
 import { SideNav } from "@/components/SideNav";
 import { PatientPane } from "@/components/PatientPane";
 import { MessagesPane } from "@/components/MessagesPane";
+import { ThreadsPane } from "@/components/ThreadsPane";
 import { TemplatesPane } from "@/components/TemplatesPane";
 import { SmsSimulator } from "@/components/SmsSimulator";
 import { ResizableSplit } from "@/components/resize/ResizableSplit";
+import type { NavSection } from "@/lib/types";
+
+function CenterPanel({ nav }: { nav: NavSection }) {
+  if (nav === "threads") {
+    return (
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
+        <ThreadsPane />
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full overflow-y-auto bg-slate-50">
+      {nav === "patient" && <PatientPane />}
+      {nav === "messages" && <MessagesPane />}
+      {nav === "templates" && <TemplatesPane />}
+    </div>
+  );
+}
 
 export default function AppPage() {
   const { user, loading, nav } = useApp();
@@ -47,14 +67,8 @@ export default function AppPage() {
             maxSize={2000}
             minSecondary={200}
             storageKey="scent-simulator-height"
-            className="h-full"
-            first={
-              <div className="h-full overflow-y-auto bg-slate-50">
-                {nav === "patient" && <PatientPane />}
-                {nav === "messages" && <MessagesPane />}
-                {nav === "templates" && <TemplatesPane />}
-              </div>
-            }
+            className="h-full min-h-0"
+            first={<CenterPanel nav={nav} />}
             second={
               <div className="h-full min-h-[160px]">
                 <SmsSimulator />

@@ -31,7 +31,7 @@ export async function campaignRoutes(app: FastifyInstance) {
         scheduled: { orderBy: { sendAt: "asc" } },
       },
       orderBy: { startedAt: "desc" },
-      take: 20,
+      take: 100,
     });
 
     await recordAudit({
@@ -165,7 +165,10 @@ export async function campaignRoutes(app: FastifyInstance) {
 
     const updated = await prisma.activeCampaign.update({
       where: { id },
-      data: { status: CampaignStatus.CANCELLED },
+      data: {
+        status: CampaignStatus.CANCELLED,
+        completedAt: new Date(),
+      },
       include: { scheduled: true, patient: true, template: true },
     });
 

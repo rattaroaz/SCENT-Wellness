@@ -7,6 +7,7 @@ const items: { key: NavSection; label: string }[] = [
   { key: "patient", label: "Patient" },
   { key: "messages", label: "Messages" },
   { key: "templates", label: "Templates" },
+  { key: "threads", label: "Threads" },
 ];
 
 export function SideNav() {

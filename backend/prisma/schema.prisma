@@ -49,6 +49,8 @@ model Patient {
   createdAt   DateTime          @default(now())
   campaigns   ActiveCampaign[]
   smsLogs     SimulatedSmsLog[]
+
+  @@index([createdAt])
 }
 
 model ProcedureTemplate {
@@ -77,14 +79,17 @@ model TemplateMessage {
 model ActiveCampaign {
   id             String             @id @default(cuid())
   patientId      String
-  patient        Patient            @relation(fields: [patientId], references: [id])
+  patient        Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
   templateId     String
-  template       ProcedureTemplate  @relation(fields: [templateId], references: [id])
+  template       ProcedureTemplate  @relation(fields: [templateId], references: [id], onDelete: Cascade)
   physicianPhone String             @default("5555555550")
   status         CampaignStatus     @default(ACTIVE)
   startedAt      DateTime           @default(now())
+  completedAt    DateTime?
   scheduled      ScheduledMessage[]
   smsLogs        SimulatedSmsLog[]
+
+  @@index([status, completedAt])
 }
 
 model ScheduledMessage {
@@ -106,9 +111,9 @@ model SimulatedSmsLog {
   toNumber            String
   body                String
   patientId           String?
-  patient             Patient?                @relation(fields: [patientId], references: [id])
+  patient             Patient?                @relation(fields: [patientId], references: [id], onDelete: Cascade)
   campaignId          String?
-  campaign            ActiveCampaign?         @relation(fields: [campaignId], references: [id])
+  campaign            ActiveCampaign?         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   replyToLogId        String?
   replyTo             SimulatedSmsLog?        @relation("ReplyChain", fields: [replyToLogId], references: [id])
   replies             SimulatedSmsLog[]     @relation("ReplyChain")

@@ -5,9 +5,14 @@ import {
 } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { getLogger } from "../lib/logger";
+import { purgeExpiredPatients } from "../lib/patientRetention";
+import { purgeExpiredThreads } from "../lib/threadRetention";
 
 const log = getLogger("scheduler");
 const APP_FROM = "SCENT-App";
+
+let lastRetentionRun = 0;
+const RETENTION_INTERVAL_MS = 60 * 60 * 1000;
 
 export async function processDueMessages(): Promise<number> {
   const now = new Date();
@@ -74,7 +79,10 @@ export async function processDueMessages(): Promise<number> {
       if (pending === 0) {
         await prisma.activeCampaign.update({
           where: { id: c.id },
-          data: { status: CampaignStatus.COMPLETED },
+          data: {
+            status: CampaignStatus.COMPLETED,
+            completedAt: new Date(),
+          },
         });
         log.info({ campaignId: c.id }, "campaign completed");
       }
@@ -86,6 +94,18 @@ export async function processDueMessages(): Promise<number> {
   if (sent > 0) {
     log.info({ count: sent }, "batch messages dispatched");
   }
+
+  const tickMs = Date.now();
+  if (tickMs - lastRetentionRun >= RETENTION_INTERVAL_MS) {
+    lastRetentionRun = tickMs;
+    try {
+      await purgeExpiredPatients();
+      await purgeExpiredThreads();
+    } catch (err) {
+      log.error({ err }, "retention purge failed");
+    }
+  }
+
   return sent;
 }
 

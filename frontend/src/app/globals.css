@@ -5,3 +5,24 @@
 body {
   @apply bg-slate-50 text-slate-900 antialiased;
 }
+
+/* Thread tree connectors: patient → campaign → message */
+.tree-children {
+  position: relative;
+  margin-left: 1.25rem;
+  border-left: 1px solid rgb(226 232 240);
+}
+
+.tree-leaf {
+  position: relative;
+}
+
+.tree-leaf::before {
+  content: "";
+  position: absolute;
+  left: -1.25rem;
+  top: 0.85em;
+  width: 0.75rem;
+  height: 1px;
+  background: rgb(226 232 240);
+}

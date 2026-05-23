@@ -1,7 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
-import { requireAuth } from "../lib/auth";
+import { canManagePatients, requireAuth } from "../lib/auth";
 import { getLogger } from "../lib/logger";
 import { recordAudit } from "../lib/audit";
 
@@ -74,11 +74,16 @@ export async function patientRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: parsed.error.flatten() });
     }
 
-    const patient = await prisma.patient.upsert({
+    const existing = await prisma.patient.findUnique({
       where: { mrn: parsed.data.mrn },
-      update: parsed.data,
-      create: parsed.data,
     });
+
+    const patient = existing
+      ? await prisma.patient.update({
+          where: { id: existing.id },
+          data: parsed.data,
+        })
+      : await prisma.patient.create({ data: parsed.data });
 
     await recordAudit({
       userId: user.id,
@@ -90,5 +95,31 @@ export async function patientRoutes(app: FastifyInstance) {
 
     log.info({ userId: user.id, patientId: patient.id, mrn: patient.mrn }, "patient saved");
     return { patient };
+  });
+
+  app.delete("/patients/:id", async (request, reply) => {
+    const user = requireAuth(request);
+    if (!canManagePatients(user.role)) {
+      return reply.status(403).send({ error: "Guests cannot delete patients" });
+    }
+
+    const { id } = request.params as { id: string };
+    const found = await prisma.patient.findUnique({ where: { id } });
+    if (!found) {
+      return reply.status(404).send({ error: "Patient not found" });
+    }
+
+    await prisma.patient.delete({ where: { id } });
+
+    await recordAudit({
+      userId: user.id,
+      action: "patient.delete",
+      resource: "patient",
+      resourceId: id,
+      metadata: { mrn: found.mrn },
+    });
+
+    log.info({ userId: user.id, patientId: id }, "patient deleted");
+    return { ok: true };
   });
 }

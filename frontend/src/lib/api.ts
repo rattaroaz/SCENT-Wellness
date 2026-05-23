@@ -43,7 +43,9 @@ export async function api<T>(
       durationMs: Date.now() - start,
       err: String(err),
     });
-    throw err;
+    throw new Error(
+      `Cannot reach the API at ${API_URL}. Run "npm run dev" from the project root and ensure the backend is on port 3001.`
+    );
   }
 
   const durationMs = Date.now() - start;

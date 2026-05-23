@@ -6,6 +6,7 @@ import { patientRoutes } from "./routes/patients";
 import { templateRoutes } from "./routes/templates";
 import { campaignRoutes } from "./routes/campaigns";
 import { smsRoutes } from "./routes/sms";
+import { activityRoutes } from "./routes/activity";
 import { startScheduler } from "./services/scheduler";
 import type { JwtUser } from "./lib/auth";
 import { authenticate } from "./plugins/authenticate";
@@ -43,6 +44,7 @@ export async function buildApp() {
   await app.register(templateRoutes);
   await app.register(campaignRoutes);
   await app.register(smsRoutes);
+  await app.register(activityRoutes);
 
   return app;
 }
@@ -58,7 +60,19 @@ async function main() {
   const app = await buildApp();
   startScheduler(1000);
 
-  await app.listen({ port: PORT, host: "0.0.0.0" });
+  try {
+    await app.listen({ port: PORT, host: "0.0.0.0" });
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EADDRINUSE") {
+      appLogger.fatal(
+        { port: PORT, err },
+        `Port ${PORT} is already in use. Run "npm run dev:clean" from the project root, then try again.`
+      );
+      process.exit(1);
+    }
+    throw err;
+  }
   appLogger.info({ port: PORT }, "API listening");
 }
 

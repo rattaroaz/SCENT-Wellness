@@ -25,3 +25,7 @@ export function requireAuth(request: FastifyRequest): JwtUser {
 export function canEditTemplates(role: Role): boolean {
   return role === Role.ADMIN || role === Role.USER;
 }
+
+export function canManagePatients(role: Role): boolean {
+  return role === Role.ADMIN || role === Role.USER;
+}

@@ -10,12 +10,13 @@ import {
 } from "react";
 import { api, setToken } from "@/lib/api";
 import type {
+  ActivityTreePatient,
   Campaign,
+  CompletedThread,
   NavSection,
   Patient,
   PhysicianEntry,
   ProcedureTemplate,
-  Role,
   SmsLog,
   User,
 } from "@/lib/types";
@@ -29,6 +30,11 @@ type AppContextValue = {
   setPatient: (p: Patient | null) => void;
   campaign: Campaign | null;
   setCampaign: (c: Campaign | null) => void;
+  activityTree: ActivityTreePatient[];
+  completedThreads: CompletedThread[];
+  threadRetentionDays: number;
+  refreshActivityTree: () => Promise<void>;
+  refreshCompletedThreads: () => Promise<void>;
   templates: ProcedureTemplate[];
   refreshTemplates: () => Promise<void>;
   patientSms: SmsLog[];
@@ -37,6 +43,9 @@ type AppContextValue = {
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   canEditTemplates: boolean;
+  canManagePatients: boolean;
+  deletePatient: (id: string) => Promise<void>;
+  deleteTemplate: (id: string) => Promise<void>;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -47,11 +56,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [nav, setNav] = useState<NavSection>("patient");
   const [patient, setPatient] = useState<Patient | null>(null);
   const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const [activityTree, setActivityTree] = useState<ActivityTreePatient[]>([]);
+  const [completedThreads, setCompletedThreads] = useState<CompletedThread[]>([]);
+  const [threadRetentionDays, setThreadRetentionDays] = useState(30);
   const [templates, setTemplates] = useState<ProcedureTemplate[]>([]);
   const [patientSms, setPatientSms] = useState<SmsLog[]>([]);
   const [physicianInbox, setPhysicianInbox] = useState<PhysicianEntry[]>([]);
 
   const canEditTemplates = user?.role === "ADMIN" || user?.role === "USER";
+  const canManagePatients = canEditTemplates;
+
+  const refreshActivityTree = useCallback(async () => {
+    try {
+      const res = await api<{ patients: ActivityTreePatient[] }>("/activity/tree");
+      setActivityTree(res.patients ?? []);
+    } catch (err) {
+      console.error("activity tree refresh failed", err);
+      setActivityTree([]);
+    }
+  }, []);
+
+  const refreshCompletedThreads = useCallback(async () => {
+    try {
+      const res = await api<{
+        threads: CompletedThread[];
+        retentionDays: number;
+      }>("/activity/completed");
+      setCompletedThreads(res.threads ?? []);
+      setThreadRetentionDays(res.retentionDays ?? 30);
+    } catch (err) {
+      console.error("completed threads refresh failed", err);
+      setCompletedThreads([]);
+    }
+  }, []);
 
   const refreshTemplates = useCallback(async () => {
     const res = await api<{ templates: ProcedureTemplate[] }>("/templates");
@@ -72,14 +109,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPhysicianInbox(phys.entries);
   }, [patient?.id, campaign?.id]);
 
-  const refreshCampaign = useCallback(async () => {
-    if (!patient?.id) return;
-    const res = await api<{ campaigns: Campaign[] }>(
-      `/campaigns?patientId=${patient.id}`
-    );
-    const active = res.campaigns.find((c) => c.status === "ACTIVE");
-    setCampaign(active ?? res.campaigns[0] ?? null);
-  }, [patient?.id]);
+  const deletePatient = useCallback(
+    async (id: string) => {
+      await api(`/patients/${id}`, { method: "DELETE" });
+      if (patient?.id === id) {
+        setPatient(null);
+        setCampaign(null);
+      }
+      await Promise.all([refreshActivityTree(), refreshCompletedThreads()]);
+    },
+    [patient?.id, refreshActivityTree, refreshCompletedThreads]
+  );
+
+  const deleteTemplate = useCallback(
+    async (id: string) => {
+      await api(`/templates/${id}`, { method: "DELETE" });
+      await refreshTemplates();
+      await Promise.all([refreshActivityTree(), refreshCompletedThreads()]);
+    },
+    [refreshTemplates, refreshActivityTree, refreshCompletedThreads]
+  );
 
   useEffect(() => {
     api<{ user: User }>("/auth/me")
@@ -91,12 +140,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user) return;
     refreshTemplates().catch(console.error);
-  }, [user, refreshTemplates]);
-
-  useEffect(() => {
-    if (!user || !patient) return;
-    refreshCampaign().catch(console.error);
-  }, [user, patient, refreshCampaign]);
+    refreshActivityTree().catch(console.error);
+    refreshCompletedThreads().catch(console.error);
+  }, [user, refreshTemplates, refreshActivityTree, refreshCompletedThreads]);
 
   useEffect(() => {
     if (!user) return;
@@ -106,14 +152,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [user, refreshSms]);
 
   useEffect(() => {
-    if (!user || !campaign) return;
+    if (!user) return;
     const id = setInterval(() => {
-      api<{ campaign: Campaign }>(`/campaigns/${campaign.id}`)
-        .then((r) => setCampaign(r.campaign))
-        .catch(console.error);
+      refreshActivityTree().catch(console.error);
+      refreshCompletedThreads().catch(console.error);
+      if (campaign?.id) {
+        api<{ campaign: Campaign }>(`/campaigns/${campaign.id}`)
+          .then((r) => {
+            if (r.campaign.status === "ACTIVE") {
+              setCampaign(r.campaign);
+            } else {
+              setCampaign(null);
+              refreshActivityTree().catch(console.error);
+              refreshCompletedThreads().catch(console.error);
+            }
+          })
+          .catch((err) => {
+            const msg = err instanceof Error ? err.message : "";
+            if (msg.includes("not found") || msg.includes("Not Found")) {
+              setCampaign(null);
+            }
+          });
+      }
     }, 2000);
     return () => clearInterval(id);
-  }, [user, campaign?.id]);
+  }, [user, campaign?.id, refreshActivityTree, refreshCompletedThreads]);
 
   const login = async (username: string, password: string) => {
     const res = await api<{ token: string; user: User }>("/auth/login", {
@@ -129,6 +192,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setPatient(null);
     setCampaign(null);
+    setActivityTree([]);
+    setCompletedThreads([]);
   };
 
   const value = useMemo(
@@ -141,6 +206,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPatient,
       campaign,
       setCampaign,
+      activityTree,
+      completedThreads,
+      threadRetentionDays,
+      refreshActivityTree,
+      refreshCompletedThreads,
       templates,
       refreshTemplates,
       patientSms,
@@ -149,6 +219,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       login,
       logout,
       canEditTemplates,
+      canManagePatients,
+      deletePatient,
+      deleteTemplate,
     }),
     [
       user,
@@ -156,12 +229,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       nav,
       patient,
       campaign,
+      activityTree,
+      completedThreads,
+      threadRetentionDays,
+      refreshActivityTree,
+      refreshCompletedThreads,
       templates,
       refreshTemplates,
       patientSms,
       physicianInbox,
       refreshSms,
       canEditTemplates,
+      canManagePatients,
+      deletePatient,
+      deleteTemplate,
     ]
   );
 

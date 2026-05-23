@@ -15,7 +15,8 @@ const emptyRow = (): TemplateMessage => ({
 });
 
 export function TemplatesPane() {
-  const { templates, refreshTemplates, canEditTemplates } = useApp();
+  const { templates, refreshTemplates, canEditTemplates, deleteTemplate } =
+    useApp();
   const [selectedId, setSelectedId] = useState("");
   const [name, setName] = useState("");
   const [rows, setRows] = useState<TemplateMessage[]>(
@@ -186,7 +187,7 @@ export function TemplatesPane() {
       </div>
 
       {canEditTemplates && (
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           <button
             type="button"
             className="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
@@ -202,6 +203,31 @@ export function TemplatesPane() {
           >
             Save
           </button>
+          {selectedId && (
+            <button
+              type="button"
+              className="rounded-lg border border-red-300 px-4 py-1.5 text-sm text-red-700 hover:bg-red-50"
+              onClick={async () => {
+                if (
+                  !confirm(
+                    "Delete this procedure template? Active campaigns using it will also be removed."
+                  )
+                ) {
+                  return;
+                }
+                try {
+                  await deleteTemplate(selectedId);
+                  setSelectedId("");
+                  setName("");
+                  setRows(Array.from({ length: 5 }, emptyRow));
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Delete failed");
+                }
+              }}
+            >
+              Delete template
+            </button>
+          )}
         </div>
       )}
 
