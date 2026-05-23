@@ -9,6 +9,10 @@ import {
   normalizePhone,
   phonesMatch,
 } from "../lib/physicianPhones";
+import { getLogger } from "../lib/logger";
+import { recordAudit } from "../lib/audit";
+
+const log = getLogger("sms");
 
 const replySchema = z.object({
   outboundLogId: z.string(),
@@ -25,7 +29,7 @@ export async function smsRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   app.get("/sms/patient-inbox", async (request) => {
-    requireAuth(request);
+    const user = requireAuth(request);
     const patientId = (request.query as { patientId?: string }).patientId;
     const campaignId = (request.query as { campaignId?: string }).campaignId;
 
@@ -36,6 +40,14 @@ export async function smsRoutes(app: FastifyInstance) {
       },
       orderBy: { createdAt: "asc" },
       take: 200,
+    });
+
+    await recordAudit({
+      userId: user.id,
+      action: "sms.inbox.read",
+      resource: "sms",
+      resourceId: patientId,
+      metadata: { campaignId, count: logs.length },
     });
 
     return { logs };
@@ -88,11 +100,20 @@ export async function smsRoutes(app: FastifyInstance) {
       },
     });
 
+    await recordAudit({
+      userId: user.id,
+      action: "physician.config.update",
+      resource: "physician_forward",
+      resourceId: id,
+      metadata: { physicianPhone: config.physicianPhone, enabled: config.enabled },
+    });
+
+    log.info({ userId: user.id, configId: id }, "physician config updated");
     return { config };
   });
 
   app.post("/sms/simulate/reply", async (request, reply) => {
-    requireAuth(request);
+    const user = requireAuth(request);
     const parsed = replySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
@@ -104,6 +125,7 @@ export async function smsRoutes(app: FastifyInstance) {
     });
 
     if (!outbound || !outbound.patient) {
+      log.warn({ outboundLogId: parsed.data.outboundLogId }, "outbound message not found for reply");
       return reply.status(404).send({ error: "Outbound message not found" });
     }
 
@@ -146,6 +168,28 @@ export async function smsRoutes(app: FastifyInstance) {
 
       return { inbound, forward };
     });
+
+    await recordAudit({
+      userId: user.id,
+      action: "sms.reply",
+      resource: "sms",
+      resourceId: outbound.id,
+      metadata: {
+        patientId: patient.id,
+        campaignId: outbound.campaignId,
+        physicianPhone: targetPhone,
+      },
+    });
+
+    log.info(
+      {
+        userId: user.id,
+        patientId: patient.id,
+        outboundLogId: outbound.id,
+        physicianPhone: targetPhone,
+      },
+      "patient reply forwarded to physician"
+    );
 
     return result;
   });

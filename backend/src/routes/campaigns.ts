@@ -5,18 +5,22 @@ import { prisma } from "../lib/prisma";
 import { computeSendAt } from "../lib/time";
 import { requireAuth } from "../lib/auth";
 import { DEFAULT_PHYSICIAN_PHONE, normalizePhone } from "../lib/physicianPhones";
+import { getLogger } from "../lib/logger";
+import { recordAudit } from "../lib/audit";
+
+const log = getLogger("campaigns");
 
 const startSchema = z.object({
   patientId: z.string(),
   templateId: z.string(),
-  physicianPhone: z.string().min(7).optional(),
+  physicianPhone: z.string().min(7).optional().or(z.literal("")),
 });
 
 export async function campaignRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   app.get("/campaigns", async (request) => {
-    requireAuth(request);
+    const user = requireAuth(request);
     const patientId = (request.query as { patientId?: string }).patientId;
 
     const campaigns = await prisma.activeCampaign.findMany({
@@ -30,11 +34,18 @@ export async function campaignRoutes(app: FastifyInstance) {
       take: 20,
     });
 
+    await recordAudit({
+      userId: user.id,
+      action: "campaign.read",
+      resource: "campaign",
+      metadata: { patientId, count: campaigns.length },
+    });
+
     return { campaigns };
   });
 
   app.get("/campaigns/:id", async (request, reply) => {
-    requireAuth(request);
+    const user = requireAuth(request);
     const { id } = request.params as { id: string };
     const campaign = await prisma.activeCampaign.findUnique({
       where: { id },
@@ -45,11 +56,19 @@ export async function campaignRoutes(app: FastifyInstance) {
       },
     });
     if (!campaign) return reply.status(404).send({ error: "Campaign not found" });
+
+    await recordAudit({
+      userId: user.id,
+      action: "campaign.read",
+      resource: "campaign",
+      resourceId: id,
+    });
+
     return { campaign };
   });
 
   app.post("/campaigns", async (request, reply) => {
-    requireAuth(request);
+    const user = requireAuth(request);
     const parsed = startSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
@@ -72,6 +91,7 @@ export async function campaignRoutes(app: FastifyInstance) {
           template: true,
         },
       });
+      log.info({ campaignId: existing.id }, "campaign already active");
       return { campaign: full, alreadyActive: true };
     }
 
@@ -118,11 +138,27 @@ export async function campaignRoutes(app: FastifyInstance) {
       },
     });
 
+    await recordAudit({
+      userId: user.id,
+      action: "campaign.start",
+      resource: "campaign",
+      resourceId: campaign.id,
+      metadata: {
+        patientId: parsed.data.patientId,
+        templateId: parsed.data.templateId,
+        physicianPhone,
+      },
+    });
+
+    log.info(
+      { campaignId: campaign.id, patientId: parsed.data.patientId, templateId: parsed.data.templateId },
+      "campaign started"
+    );
     return { campaign, alreadyActive: false };
   });
 
   app.post("/campaigns/:id/cancel", async (request, reply) => {
-    requireAuth(request);
+    const user = requireAuth(request);
     const { id } = request.params as { id: string };
     const campaign = await prisma.activeCampaign.findUnique({ where: { id } });
     if (!campaign) return reply.status(404).send({ error: "Campaign not found" });
@@ -133,6 +169,14 @@ export async function campaignRoutes(app: FastifyInstance) {
       include: { scheduled: true, patient: true, template: true },
     });
 
+    await recordAudit({
+      userId: user.id,
+      action: "campaign.cancel",
+      resource: "campaign",
+      resourceId: id,
+    });
+
+    log.info({ campaignId: id }, "campaign cancelled");
     return { campaign: updated };
   });
 }

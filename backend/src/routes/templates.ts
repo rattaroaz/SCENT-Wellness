@@ -2,6 +2,10 @@ import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { canEditTemplates, requireAuth } from "../lib/auth";
+import { getLogger } from "../lib/logger";
+import { recordAudit } from "../lib/audit";
+
+const log = getLogger("templates");
 
 const messageSchema = z.object({
   body: z.string(),
@@ -21,22 +25,41 @@ export async function templateRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   app.get("/templates", async (request) => {
-    requireAuth(request);
+    const user = requireAuth(request);
     const templates = await prisma.procedureTemplate.findMany({
       include: { messages: { orderBy: { sortOrder: "asc" } } },
       orderBy: { name: "asc" },
     });
+
+    await recordAudit({
+      userId: user.id,
+      action: "template.list",
+      resource: "template",
+      metadata: { count: templates.length },
+    });
+
     return { templates };
   });
 
   app.get("/templates/:id", async (request, reply) => {
-    requireAuth(request);
+    const user = requireAuth(request);
     const { id } = request.params as { id: string };
     const template = await prisma.procedureTemplate.findUnique({
       where: { id },
       include: { messages: { orderBy: { sortOrder: "asc" } } },
     });
-    if (!template) return reply.status(404).send({ error: "Template not found" });
+    if (!template) {
+      log.warn({ userId: user.id, templateId: id }, "template not found");
+      return reply.status(404).send({ error: "Template not found" });
+    }
+
+    await recordAudit({
+      userId: user.id,
+      action: "template.read",
+      resource: "template",
+      resourceId: id,
+    });
+
     return { template };
   });
 
@@ -77,6 +100,15 @@ export async function templateRoutes(app: FastifyInstance) {
       include: { messages: { orderBy: { sortOrder: "asc" } } },
     });
 
+    await recordAudit({
+      userId: user.id,
+      action: "template.create",
+      resource: "template",
+      resourceId: template.id,
+      metadata: { name: template.name, messageCount: template.messages.length },
+    });
+
+    log.info({ userId: user.id, templateId: template.id, name: template.name }, "template created");
     return { template };
   });
 
@@ -136,6 +168,15 @@ export async function templateRoutes(app: FastifyInstance) {
       });
     });
 
+    await recordAudit({
+      userId: user.id,
+      action: "template.update",
+      resource: "template",
+      resourceId: id,
+      metadata: { name: template.name, messageCount: template.messages.length },
+    });
+
+    log.info({ userId: user.id, templateId: id }, "template updated");
     return { template };
   });
 }

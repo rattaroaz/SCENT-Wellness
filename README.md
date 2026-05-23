@@ -56,5 +56,22 @@ npm run dev:frontend
 
 ## Environment
 
-- `backend/.env` — `DATABASE_URL`, `PORT=3001`, `JWT_SECRET`, `FRONTEND_URL`
+- `backend/.env` — `DATABASE_URL`, `PORT=3001`, `JWT_SECRET`, `FRONTEND_URL`, `LOG_LEVEL`, optional `LOG_FILE`
 - `frontend/.env.local` — `NEXT_PUBLIC_API_URL=http://localhost:3001`
+
+## Logging
+
+- **Backend:** Pino structured logs with PHI redaction (`password`, `token`, phone/DOB in audit metadata). HTTP logging is centralized in one plugin (`disableRequestLogging` avoids duplicates).
+- **Audit trail:** `AuditLog` table records auth, patient, template, campaign, and SMS actions (IDs only in metadata — no PHI in audit rows).
+- **Frontend:** `clientLogger` in `frontend/src/lib/logger.ts`; `api.ts` logs request timing and errors in development.
+
+## Testing
+
+```powershell
+npm run test              # backend + frontend (single run)
+npm run test:backend
+npm run test:frontend
+cd backend; npm run test:coverage
+```
+
+Backend tests use an isolated `test.db` (migrate + seed on first run). CI runs on push/PR via `.github/workflows/ci.yml`.

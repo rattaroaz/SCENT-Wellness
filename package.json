@@ -10,7 +10,10 @@
     "setup": "npm install && npm run db:generate && npm run db:migrate && npm run db:seed",
     "db:generate": "npm run db:generate --workspace=backend",
     "db:migrate": "npm run db:migrate --workspace=backend",
-    "db:seed": "npm run db:seed --workspace=backend"
+    "db:seed": "npm run db:seed --workspace=backend",
+    "test": "npm run test:run --workspace=backend && npm run test:run --workspace=frontend",
+    "test:backend": "npm run test --workspace=backend",
+    "test:frontend": "npm run test --workspace=frontend"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

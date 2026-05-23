@@ -9,13 +9,21 @@ import { smsRoutes } from "./routes/sms";
 import { startScheduler } from "./services/scheduler";
 import type { JwtUser } from "./lib/auth";
 import { authenticate } from "./plugins/authenticate";
+import { getLogger } from "./lib/logger";
+import { registerLogging } from "./plugins/logging";
 
 const PORT = Number(process.env.PORT) || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 
-async function buildApp() {
-  const app = Fastify({ logger: true });
+const appLogger = getLogger("app");
+
+export async function buildApp() {
+  const app = Fastify({
+    logger: false,
+    genReqId: (req) =>
+      req.headers["x-request-id"]?.toString() || crypto.randomUUID(),
+  });
 
   await app.register(cors, {
     origin: FRONTEND_URL,
@@ -23,6 +31,8 @@ async function buildApp() {
   });
 
   await app.register(jwt, { secret: JWT_SECRET });
+
+  await registerLogging(app);
 
   app.decorate("authenticate", authenticate);
 
@@ -49,10 +59,14 @@ async function main() {
   startScheduler(1000);
 
   await app.listen({ port: PORT, host: "0.0.0.0" });
-  console.log(`API listening on http://localhost:${PORT}`);
+  appLogger.info({ port: PORT }, "API listening");
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Only run main() when this file is executed directly (not when imported by tests)
+const isMainModule = process.argv[1]?.endsWith("index.ts") || process.argv[1]?.endsWith("index.js");
+if (isMainModule && process.env.NODE_ENV !== "test") {
+  main().catch((err) => {
+    appLogger.fatal({ err }, "Fatal startup error");
+    process.exit(1);
+  });
+}

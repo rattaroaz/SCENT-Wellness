@@ -139,3 +139,17 @@ model PhysicianForwardEntry {
 
   @@index([physicianPhone])
 }
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  resource   String
+  resourceId String?
+  metadata   String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([resource, resourceId])
+  @@index([createdAt])
+}

@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Migrate test database
+        working-directory: backend
+        env:
+          DATABASE_URL: file:./test.db
+        run: npx prisma migrate deploy
+
+      - name: Seed test database
+        working-directory: backend
+        env:
+          DATABASE_URL: file:./test.db
+        run: npx tsx prisma/seed.ts
+
+      - name: Backend tests
+        run: npm run test:run --workspace=backend
+
+      - name: Frontend tests
+        run: npm run test:run --workspace=frontend
