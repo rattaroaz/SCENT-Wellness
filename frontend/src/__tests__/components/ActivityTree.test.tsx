@@ -26,6 +26,7 @@ const patients: ActivityTreePatient[] = [
             sentAt: null,
             status: "PENDING",
             body: "Welcome message",
+            expectsResponse: true,
           },
         ],
       },

@@ -56,6 +56,8 @@ export async function processDueMessages(): Promise<SchedulerTickResult> {
             body: msg.body,
             patientId: patient.id,
             campaignId: msg.campaignId,
+            scheduledMessageId: msg.id,
+            expectsResponse: msg.expectsResponse,
             questionMessage: msg.body,
           },
         });

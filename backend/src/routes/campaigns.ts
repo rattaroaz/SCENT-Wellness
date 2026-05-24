@@ -16,6 +16,10 @@ const startSchema = z.object({
   physicianPhone: z.string().min(7).optional().or(z.literal("")),
 });
 
+const scheduledPatchSchema = z.object({
+  expectsResponse: z.boolean(),
+});
+
 export async function campaignRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
@@ -120,6 +124,7 @@ export async function campaignRoutes(app: FastifyInstance) {
           create: template.messages.map((m) => ({
             templateMessageId: m.id,
             body: m.body,
+            expectsResponse: m.expectsResponse,
             sendAt: computeSendAt(
               startedAt,
               m.weeks,
@@ -181,5 +186,53 @@ export async function campaignRoutes(app: FastifyInstance) {
 
     log.info({ campaignId: id }, "campaign cancelled");
     return { campaign: updated };
+  });
+
+  app.patch("/scheduled-messages/:id", async (request, reply) => {
+    const user = requireAuth(request);
+    const { id } = request.params as { id: string };
+    const parsed = scheduledPatchSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: parsed.error.flatten() });
+    }
+
+    const existing = await prisma.scheduledMessage.findUnique({
+      where: { id },
+      include: { campaign: true },
+    });
+    if (!existing) {
+      return reply.status(404).send({ error: "Scheduled message not found" });
+    }
+    if (existing.campaign.status !== CampaignStatus.ACTIVE) {
+      return reply.status(400).send({ error: "Campaign is not active" });
+    }
+
+    const scheduled = await prisma.scheduledMessage.update({
+      where: { id },
+      data: { expectsResponse: parsed.data.expectsResponse },
+    });
+
+    await recordAudit({
+      userId: user.id,
+      action: "scheduled.update",
+      resource: "scheduled_message",
+      resourceId: id,
+      reqId: request.id,
+      metadata: {
+        campaignId: existing.campaignId,
+        expectsResponse: scheduled.expectsResponse,
+      },
+    });
+
+    log.info(
+      {
+        scheduledMessageId: id,
+        campaignId: existing.campaignId,
+        expectsResponse: scheduled.expectsResponse,
+      },
+      "scheduled message response setting updated"
+    );
+
+    return { scheduled };
   });
 }

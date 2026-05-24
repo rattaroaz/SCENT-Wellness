@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useApp } from "@/context/AppContext";
+import { ResponseExpectedToggle } from "@/components/ResponseExpectedToggle";
+import { DEFAULT_NO_REPLY_MESSAGE } from "@/lib/smsDefaults";
 import type { ProcedureTemplate, TemplateMessage } from "@/lib/types";
 
 const emptyRow = (): TemplateMessage => ({
@@ -12,6 +14,7 @@ const emptyRow = (): TemplateMessage => ({
   hours: 0,
   minutes: 0,
   seconds: 0,
+  expectsResponse: true,
 });
 
 export function TemplatesPane() {
@@ -19,6 +22,7 @@ export function TemplatesPane() {
     useApp();
   const [selectedId, setSelectedId] = useState("");
   const [name, setName] = useState("");
+  const [noReplyMessage, setNoReplyMessage] = useState(DEFAULT_NO_REPLY_MESSAGE);
   const [rows, setRows] = useState<TemplateMessage[]>(
     Array.from({ length: 5 }, emptyRow)
   );
@@ -30,6 +34,7 @@ export function TemplatesPane() {
     const t = templates.find((x) => x.id === selectedId);
     if (t) {
       setName(t.name);
+      setNoReplyMessage(t.noReplyMessage ?? DEFAULT_NO_REPLY_MESSAGE);
       setRows(
         t.messages.length > 0
           ? t.messages.map((m) => ({
@@ -39,6 +44,7 @@ export function TemplatesPane() {
               hours: m.hours,
               minutes: m.minutes,
               seconds: m.seconds,
+              expectsResponse: m.expectsResponse !== false,
             }))
           : Array.from({ length: 5 }, emptyRow)
       );
@@ -52,7 +58,11 @@ export function TemplatesPane() {
     setName(t.name);
   }, [templates, selectedId, saving]);
 
-  function updateRow(i: number, field: keyof TemplateMessage, value: string) {
+  function updateRow(
+    i: number,
+    field: keyof TemplateMessage,
+    value: string | boolean
+  ) {
     setRows((prev) =>
       prev.map((r, idx) =>
         idx === i
@@ -60,8 +70,10 @@ export function TemplatesPane() {
               ...r,
               [field]:
                 field === "body"
-                  ? value
-                  : Math.max(0, parseInt(value, 10) || 0),
+                  ? String(value)
+                  : field === "expectsResponse"
+                    ? Boolean(value)
+                    : Math.max(0, parseInt(String(value), 10) || 0),
             }
           : r
       )
@@ -74,7 +86,13 @@ export function TemplatesPane() {
     setSaving(true);
     const payload = {
       name: name.trim(),
-      messages: rows.filter((r) => r.body.trim()),
+      noReplyMessage: noReplyMessage.trim(),
+      messages: rows
+        .filter((r) => r.body.trim())
+        .map((r) => ({
+          ...r,
+          expectsResponse: r.expectsResponse !== false,
+        })),
     };
     if (!payload.name || payload.messages.length === 0) {
       setError("Name and at least one message required");
@@ -119,7 +137,10 @@ export function TemplatesPane() {
             value={selectedId}
             onChange={(e) => {
               setSelectedId(e.target.value);
-              if (!e.target.value) setName("");
+              if (!e.target.value) {
+                setName("");
+                setNoReplyMessage(DEFAULT_NO_REPLY_MESSAGE);
+              }
             }}
           >
             <option value="">— New template —</option>
@@ -142,11 +163,32 @@ export function TemplatesPane() {
         </div>
       </div>
 
+      <div className="mt-6 max-w-2xl">
+        <label className="text-sm font-medium text-slate-700">
+          Auto-reply when patient texts a no-reply message
+        </label>
+        <textarea
+          disabled={!canEditTemplates}
+          className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm"
+          rows={3}
+          value={noReplyMessage}
+          onChange={(e) => setNoReplyMessage(e.target.value)}
+          placeholder={DEFAULT_NO_REPLY_MESSAGE}
+        />
+        <p className="mt-1 text-xs text-slate-500">
+          Sent to the patient if they reply to a message marked as not accepting
+          responses.
+        </p>
+      </div>
+
       <div className="mt-6 overflow-x-auto">
-        <table className="w-full min-w-[700px] text-sm">
+        <table className="w-full min-w-[760px] text-sm">
           <thead>
             <tr className="border-b text-left text-slate-500">
               <th className="pb-2 pr-2">Message</th>
+              <th className="pb-2 px-1 w-16 text-center" title="Patient can reply">
+                Reply
+              </th>
               <th className="pb-2 px-1 w-14">Weeks</th>
               <th className="pb-2 px-1 w-14">Days</th>
               <th className="pb-2 px-1 w-14">Hours</th>
@@ -165,6 +207,16 @@ export function TemplatesPane() {
                     value={row.body}
                     onChange={(e) => updateRow(i, "body", e.target.value)}
                   />
+                </td>
+                <td className="px-1 py-2 text-center">
+                  <div className="flex justify-center">
+                    <ResponseExpectedToggle
+                      checked={row.expectsResponse !== false}
+                      disabled={!canEditTemplates}
+                      compact
+                      onChange={(next) => updateRow(i, "expectsResponse", next)}
+                    />
+                  </div>
                 </td>
                 {(["weeks", "days", "hours", "minutes", "seconds"] as const).map(
                   (f) => (
@@ -219,6 +271,7 @@ export function TemplatesPane() {
                   await deleteTemplate(selectedId);
                   setSelectedId("");
                   setName("");
+                  setNoReplyMessage(DEFAULT_NO_REPLY_MESSAGE);
                   setRows(Array.from({ length: 5 }, emptyRow));
                 } catch (err) {
                   setError(err instanceof Error ? err.message : "Delete failed");

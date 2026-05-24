@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { formatCountdown } from "@/lib/countdown";
+import { useNow } from "@/hooks/useNow";
 import { useTreeExpansion } from "@/hooks/useTreeExpansion";
 import { TreeChevron } from "@/components/tree/TreeChevron";
 import { TreeToolbar } from "@/components/tree/TreeToolbar";
@@ -57,6 +58,7 @@ export function ActivityTree({
     treeKeys,
     { storageKey: "scent-active-tree-expanded" }
   );
+  const now = useNow();
 
   if (patients.length === 0) {
     return <p className="p-4 text-sm text-slate-500">{emptyLabel}</p>;
@@ -162,7 +164,9 @@ export function ActivityTree({
                           <ul className="tree-children" role="group">
                             {scheduled.map((msg) => {
                               const remaining =
-                                new Date(msg.sendAt).getTime() - Date.now();
+                                now === null
+                                  ? 0
+                                  : new Date(msg.sendAt).getTime() - now;
                               return (
                                 <li
                                   key={msg.id}
@@ -170,11 +174,16 @@ export function ActivityTree({
                                   className="tree-leaf py-1 pl-14 pr-3 text-xs text-slate-600"
                                 >
                                   <span className="text-slate-700">{msg.body}</span>
-                                  <span className="ml-1 text-slate-400">
-                                    {msg.status === "SENT"
-                                      ? "· sent"
-                                      : `· ${formatCountdown(remaining)}`}
-                                  </span>
+                            <span className="ml-1 text-slate-400">
+                              {msg.expectsResponse === false && (
+                                <span className="text-amber-600">· no reply · </span>
+                              )}
+                              {msg.status === "SENT"
+                                ? "sent"
+                                : now === null
+                                  ? "…"
+                                  : formatCountdown(remaining)}
+                            </span>
                                 </li>
                               );
                             })}

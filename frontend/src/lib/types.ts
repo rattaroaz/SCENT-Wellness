@@ -24,12 +24,14 @@ export type TemplateMessage = {
   hours: number;
   minutes: number;
   seconds: number;
+  expectsResponse?: boolean;
   sortOrder?: number;
 };
 
 export type ProcedureTemplate = {
   id: string;
   name: string;
+  noReplyMessage?: string;
   messages: TemplateMessage[];
 };
 
@@ -39,6 +41,7 @@ export type ScheduledMessage = {
   sentAt: string | null;
   status: "PENDING" | "SENT" | "FAILED";
   body: string;
+  expectsResponse?: boolean;
 };
 
 export type Campaign = {
@@ -66,6 +69,7 @@ export type SmsLog = {
   toNumber: string;
   body: string;
   questionMessage?: string | null;
+  expectsResponse?: boolean;
   createdAt: string;
   replyToLogId?: string | null;
 };

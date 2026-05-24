@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { formatPhoneDisplay } from "@/lib/phoneFormat";
+import { useNow } from "@/hooks/useNow";
 import { useTreeExpansion } from "@/hooks/useTreeExpansion";
 import { TreeChevron } from "@/components/tree/TreeChevron";
 import { TreeToolbar } from "@/components/tree/TreeToolbar";
@@ -65,6 +66,7 @@ export function CompletedThreadsPanel({ threads, retentionDays }: Props) {
     treeKeys,
     { storageKey: "scent-completed-tree-expanded", defaultExpanded: false }
   );
+  const now = useNow();
 
   if (threads.length === 0) {
     return (
@@ -110,12 +112,16 @@ export function CompletedThreadsPanel({ threads, retentionDays }: Props) {
                     const templateName = t.template?.name ?? "Procedure";
                     const scheduled = t.scheduled ?? [];
                     const removesAt = purgeDate(t.completedAt!, retentionDays);
-                    const daysLeft = Math.max(
-                      0,
-                      Math.ceil(
-                        (removesAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)
-                      )
-                    );
+                    const daysLeft =
+                      now === null
+                        ? null
+                        : Math.max(
+                            0,
+                            Math.ceil(
+                              (removesAt.getTime() - now) /
+                                (24 * 60 * 60 * 1000)
+                            )
+                          );
 
                     return (
                       <li key={t.id} role="treeitem" aria-expanded={campaignOpen}>
@@ -143,7 +149,9 @@ export function CompletedThreadsPanel({ threads, retentionDays }: Props) {
                                 {new Date(t.completedAt!).toLocaleDateString()}
                               </span>
                               <span className="text-amber-700">
-                                Deletes in {daysLeft} day{daysLeft === 1 ? "" : "s"}
+                                {daysLeft === null
+                                  ? "Deletes soon"
+                                  : `Deletes in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`}
                               </span>
                             </p>
                           </div>

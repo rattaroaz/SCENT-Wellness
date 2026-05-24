@@ -41,6 +41,7 @@ export async function createTestTemplate(messages: Array<{
   hours?: number;
   minutes?: number;
   seconds?: number;
+  expectsResponse?: boolean;
 }>) {
   return prisma.procedureTemplate.create({
     data: {
@@ -54,6 +55,7 @@ export async function createTestTemplate(messages: Array<{
           hours: m.hours ?? 0,
           minutes: m.minutes ?? 0,
           seconds: m.seconds ?? 0,
+          expectsResponse: m.expectsResponse ?? true,
         })),
       },
     },

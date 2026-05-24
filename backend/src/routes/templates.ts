@@ -14,10 +14,12 @@ const messageSchema = z.object({
   hours: z.number().int().min(0).default(0),
   minutes: z.number().int().min(0).default(0),
   seconds: z.number().int().min(0).default(0),
+  expectsResponse: z.boolean().optional().default(true),
 });
 
 const templateSchema = z.object({
   name: z.string().min(1),
+  noReplyMessage: z.string().min(1).optional(),
   messages: z.array(messageSchema).min(1),
 });
 
@@ -84,6 +86,9 @@ export async function templateRoutes(app: FastifyInstance) {
     const template = await prisma.procedureTemplate.create({
       data: {
         name: parsed.data.name,
+        ...(parsed.data.noReplyMessage
+          ? { noReplyMessage: parsed.data.noReplyMessage.trim() }
+          : {}),
         createdByUserId: user.id,
         messages: {
           create: parsed.data.messages.map((m, i) => ({
@@ -94,6 +99,7 @@ export async function templateRoutes(app: FastifyInstance) {
             hours: m.hours,
             minutes: m.minutes,
             seconds: m.seconds,
+            expectsResponse: m.expectsResponse ?? true,
           })),
         },
       },
@@ -152,6 +158,9 @@ export async function templateRoutes(app: FastifyInstance) {
         where: { id },
         data: {
           name: parsed.data.name,
+          ...(parsed.data.noReplyMessage !== undefined
+            ? { noReplyMessage: parsed.data.noReplyMessage.trim() }
+            : {}),
           messages: {
             create: parsed.data.messages.map((m, i) => ({
               sortOrder: i,
@@ -161,6 +170,7 @@ export async function templateRoutes(app: FastifyInstance) {
               hours: m.hours,
               minutes: m.minutes,
               seconds: m.seconds,
+              expectsResponse: m.expectsResponse ?? true,
             })),
           },
         },

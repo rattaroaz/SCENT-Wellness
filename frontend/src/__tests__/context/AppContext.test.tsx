@@ -152,4 +152,46 @@ describe("AppContext", () => {
     expect(screen.getByTestId("canEdit")).toHaveTextContent("false");
     expect(screen.getByTestId("canManage")).toHaveTextContent("false");
   });
+
+  it("refresh failures are caught and do not crash the provider", async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url.endsWith("/auth/me"))
+        return Promise.resolve(jsonResponse({ user: { id: "u1", username: "admin", role: "ADMIN" } }));
+      if (url.includes("/sms/patient-inbox"))
+        return Promise.reject(new Error("network down"));
+      return Promise.resolve(jsonResponse({ patients: [], templates: [], threads: [], logs: [], entries: [], retentionDays: 30 }));
+    });
+
+    render(
+      <AppProvider>
+        <Probe />
+      </AppProvider>
+    );
+    await waitFor(() => expect(screen.getByTestId("user")).toHaveTextContent("admin"));
+    // Provider should still be mounted; no uncaught error thrown to test runner
+    expect(screen.getByTestId("user")).toHaveTextContent("admin");
+  });
+
+  it("sets up 2s polling interval for SMS and campaign status", async () => {
+    // Spy before render so we capture calls from useEffect
+    const setIntervalSpy = vi.spyOn(globalThis, "setInterval");
+    fetchMock.mockImplementation((url: string) => {
+      if (url.endsWith("/auth/me"))
+        return Promise.resolve(jsonResponse({ user: { id: "u1", username: "admin", role: "ADMIN" } }));
+      return Promise.resolve(jsonResponse({ patients: [], templates: [], threads: [], logs: [], entries: [], retentionDays: 30 }));
+    });
+
+    render(
+      <AppProvider>
+        <Probe />
+      </AppProvider>
+    );
+    await waitFor(() => expect(screen.getByTestId("user")).toHaveTextContent("admin"));
+
+    // AppContext sets up 2s intervals (SMS inbox + campaign status)
+    const calls = setIntervalSpy.mock.calls.filter((c) => c[1] === 2000);
+    expect(calls.length).toBeGreaterThanOrEqual(1);
+
+    setIntervalSpy.mockRestore();
+  });
 });

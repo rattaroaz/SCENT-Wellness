@@ -19,6 +19,7 @@ function makeThread(overrides: Partial<CompletedThread> = {}): CompletedThread {
         sendAt: new Date().toISOString(),
         sentAt: new Date().toISOString(),
         status: "SENT",
+        expectsResponse: true,
       },
     ],
     patient: {

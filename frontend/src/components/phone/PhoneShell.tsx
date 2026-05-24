@@ -1,37 +1,89 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { formatPhoneDisplay } from "@/lib/phoneFormat";
 
 export type PhoneThreadMessage = {
   id: string;
   body: string;
   createdAt: string;
+  /** true = clinic (gray bubble on left) */
   received: boolean;
+  /** Clinic message that can still receive a patient reply */
+  canSelectAsReplyTarget?: boolean;
+  /** Currently selected for the compose box */
+  isReplyTarget?: boolean;
+  /** Clinic message already answered by the patient */
+  isAnswered?: boolean;
+  expectsResponse?: boolean;
 };
 
-function MessageBubble({ message }: { message: PhoneThreadMessage }) {
-  return (
-    <div className={`flex ${message.received ? "justify-start" : "justify-end"}`}>
-      <div
-        className={`max-w-[78%] px-3.5 py-2 text-[15px] leading-snug shadow-sm ${
-          message.received
-            ? "rounded-2xl rounded-tl-sm bg-[#e9e9eb] text-black"
-            : "rounded-2xl rounded-tr-sm bg-[#007aff] text-white"
+function MessageBubble({
+  message,
+  onSelectReplyTarget,
+}: {
+  message: PhoneThreadMessage;
+  onSelectReplyTarget?: (id: string) => void;
+}) {
+  const isClinic = message.received;
+  const tappable = isClinic && message.canSelectAsReplyTarget && onSelectReplyTarget;
+
+  const bubble = (
+    <div
+      className={`max-w-[78%] px-3.5 py-2 text-[15px] leading-snug shadow-sm transition ${
+        isClinic
+          ? "rounded-2xl rounded-tl-sm bg-[#e9e9eb] text-black"
+          : "rounded-2xl rounded-tr-sm bg-[#007aff] text-white"
+      } ${
+        message.isReplyTarget
+          ? "ring-2 ring-[#007aff] ring-offset-1"
+          : ""
+      } ${tappable ? "cursor-pointer hover:bg-[#dcdce0]" : ""}`}
+    >
+      <p className="whitespace-pre-wrap break-words">{message.body}</p>
+      <p
+        className={`mt-0.5 flex flex-wrap items-center justify-end gap-1 text-[11px] ${
+          isClinic ? "text-black/45" : "text-white/70"
         }`}
       >
-        <p className="whitespace-pre-wrap break-words">{message.body}</p>
-        <p
-          className={`mt-0.5 text-right text-[11px] ${
-            message.received ? "text-black/45" : "text-white/70"
-          }`}
-        >
+        {isClinic && message.isAnswered && (
+          <span className="rounded bg-black/10 px-1 py-px text-[10px]">
+            Replied
+          </span>
+        )}
+        {isClinic && message.canSelectAsReplyTarget && message.isReplyTarget && (
+          <span className="rounded bg-[#007aff]/15 px-1 py-px text-[10px] text-[#007aff]">
+            Replying here
+          </span>
+        )}
+        {isClinic && message.expectsResponse === false && !message.isAnswered && (
+          <span className="text-[10px] text-amber-700">No reply</span>
+        )}
+        <span suppressHydrationWarning>
           {new Date(message.createdAt).toLocaleTimeString([], {
             hour: "numeric",
             minute: "2-digit",
           })}
-        </p>
-      </div>
+        </span>
+      </p>
+    </div>
+  );
+
+  return (
+    <div className={`flex ${isClinic ? "justify-start" : "justify-end"}`}>
+      {tappable ? (
+        <button
+          type="button"
+          className="max-w-full text-left"
+          onClick={() => onSelectReplyTarget(message.id)}
+          aria-pressed={message.isReplyTarget}
+          aria-label={`Reply to: ${message.body.slice(0, 80)}`}
+        >
+          {bubble}
+        </button>
+      ) : (
+        bubble
+      )}
     </div>
   );
 }
@@ -45,6 +97,7 @@ type PhoneShellProps = {
   emptyHint: string;
   compose?: ReactNode;
   compact?: boolean;
+  onSelectReplyTarget?: (outboundLogId: string) => void;
 };
 
 export function PhoneShell({
@@ -56,13 +109,8 @@ export function PhoneShell({
   emptyHint,
   compose,
   compact = false,
+  onSelectReplyTarget,
 }: PhoneShellProps) {
-  const threadEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    threadEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
   const displayNumber = formatPhoneDisplay(phoneNumber);
 
   return (
@@ -101,9 +149,12 @@ export function PhoneShell({
           ) : (
             <div className="space-y-2">
               {messages.map((msg) => (
-                <MessageBubble key={msg.id} message={msg} />
+                <MessageBubble
+                  key={msg.id}
+                  message={msg}
+                  onSelectReplyTarget={onSelectReplyTarget}
+                />
               ))}
-              <div ref={threadEndRef} />
             </div>
           )}
         </div>

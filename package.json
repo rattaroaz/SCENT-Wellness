@@ -5,9 +5,11 @@
   "scripts": {
     "dev": "concurrently -k -n backend,frontend -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:clean": "powershell -ExecutionPolicy Bypass -File ./scripts/clean-dev-ports.ps1",
-    "dev:fresh": "npm run dev:clean && npm run dev",
+    "dev:reset": "powershell -ExecutionPolicy Bypass -File ./scripts/clean-dev.ps1",
+    "dev:fresh": "npm run dev:reset && npm run dev",
     "dev:backend": "npm run dev --workspace=backend",
     "dev:frontend": "npm run dev --workspace=frontend",
+    "dev:e2e-backend": "node scripts/e2e-prepare.mjs && npm run dev --workspace=backend",
     "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
     "setup": "npm install && npm run db:generate && npm run db:migrate && npm run db:seed",
     "db:generate": "npm run db:generate --workspace=backend",
@@ -15,9 +17,14 @@
     "db:seed": "npm run db:seed --workspace=backend",
     "test": "npm run test:run --workspace=backend && npm run test:run --workspace=frontend",
     "test:backend": "npm run test --workspace=backend",
-    "test:frontend": "npm run test --workspace=frontend"
+    "test:frontend": "npm run test --workspace=frontend",
+    "test:contract": "npm run test:run --workspace=backend -- src/__tests__/contract",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:install": "playwright install chromium"
   },
   "devDependencies": {
+    "@playwright/test": "^1.51.1",
     "concurrently": "^9.1.2"
   }
 }

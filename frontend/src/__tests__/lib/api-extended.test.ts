@@ -58,4 +58,28 @@ describe("api – error & network handling", () => {
     setToken(null);
     expect(localStorage.getItem("token")).toBeNull();
   });
+
+  it("throws session expired on 401 and clears token", async () => {
+    setToken("expired");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: "Unauthorized",
+        json: async () => ({ error: "Invalid token" }),
+      })
+    );
+
+    await expect(api("/auth/me")).rejects.toThrow(/Session expired/);
+    expect(localStorage.getItem("token")).toBeNull();
+  });
+
+  it("throws timeout message when fetch aborts", async () => {
+    const abortErr = new Error("Aborted");
+    abortErr.name = "AbortError";
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(abortErr));
+
+    await expect(api("/slow")).rejects.toThrow(/timed out/i);
+  });
 });

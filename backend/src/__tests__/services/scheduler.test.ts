@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   CampaignStatus,
   ScheduledMessageStatus,
@@ -98,5 +98,21 @@ describe("scheduler", () => {
     await processDueMessages();
     const second = await processDueMessages();
     expect(second.retentionRan).toBe(false);
+  });
+
+  it("increments failed and marks message FAILED when send transaction throws", async () => {
+    const txSpy = vi
+      .spyOn(prisma, "$transaction")
+      .mockRejectedValueOnce(new Error("simulated send failure"));
+
+    const result = await processDueMessages();
+    expect(result.failed).toBeGreaterThanOrEqual(1);
+
+    const failedMsg = await prisma.scheduledMessage.findFirst({
+      where: { campaignId, status: ScheduledMessageStatus.FAILED },
+    });
+    expect(failedMsg).toBeTruthy();
+
+    txSpy.mockRestore();
   });
 });

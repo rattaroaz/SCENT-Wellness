@@ -56,6 +56,8 @@ model Patient {
 model ProcedureTemplate {
   id              String            @id @default(cuid())
   name            String            @unique
+  /// Sent to the patient if they reply to a message that does not accept responses.
+  noReplyMessage  String            @default("This message does not accept replies. Please contact your clinic if you need help.")
   createdByUserId String?
   createdBy       User?             @relation(fields: [createdByUserId], references: [id])
   messages        TemplateMessage[]
@@ -71,9 +73,10 @@ model TemplateMessage {
   weeks      Int                @default(0)
   days       Int                @default(0)
   hours      Int                @default(0)
-  minutes    Int                @default(0)
-  seconds    Int                @default(0)
-  scheduled  ScheduledMessage[]
+  minutes          Int                @default(0)
+  seconds          Int                @default(0)
+  expectsResponse  Boolean            @default(true)
+  scheduled        ScheduledMessage[]
 }
 
 model ActiveCampaign {
@@ -102,6 +105,8 @@ model ScheduledMessage {
   sentAt            DateTime?
   status            ScheduledMessageStatus @default(PENDING)
   body              String
+  expectsResponse   Boolean                @default(true)
+  smsLogs           SimulatedSmsLog[]
 }
 
 model SimulatedSmsLog {
@@ -114,6 +119,9 @@ model SimulatedSmsLog {
   patient             Patient?                @relation(fields: [patientId], references: [id], onDelete: Cascade)
   campaignId          String?
   campaign            ActiveCampaign?         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  scheduledMessageId  String?
+  scheduledMessage    ScheduledMessage?       @relation(fields: [scheduledMessageId], references: [id], onDelete: SetNull)
+  expectsResponse     Boolean                 @default(true)
   replyToLogId        String?
   replyTo             SimulatedSmsLog?        @relation("ReplyChain", fields: [replyToLogId], references: [id])
   replies             SimulatedSmsLog[]     @relation("ReplyChain")

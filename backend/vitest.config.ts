@@ -5,6 +5,8 @@ export default defineConfig({
     globals: true,
     environment: "node",
     setupFiles: ["./src/test/setup.ts"],
+    include: ["src/__tests__/**/*.test.ts"],
+    exclude: ["dist/**", "node_modules/**"],
     env: {
       NODE_ENV: "test",
       VITEST: "true",
@@ -24,10 +26,10 @@ export default defineConfig({
         "src/index.ts",
       ],
       thresholds: {
-        lines: 75,
-        functions: 70,
-        branches: 70,
-        statements: 75,
+        lines: 90,
+        functions: 90,
+        branches: 72,
+        statements: 90,
       },
     },
     testTimeout: 15000,

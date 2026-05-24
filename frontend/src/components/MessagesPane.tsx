@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useNow } from "@/hooks/useNow";
 import { api } from "@/lib/api";
 import { useApp } from "@/context/AppContext";
 import { formatCountdown } from "@/lib/countdown";
@@ -14,7 +15,8 @@ import {
   loadPhysicianPhonePreference,
   savePhysicianPhonePreference,
 } from "@/lib/physicianPhonePreference";
-import type { Campaign, ProcedureTemplate } from "@/lib/types";
+import { ResponseExpectedToggle } from "@/components/ResponseExpectedToggle";
+import type { Campaign, ProcedureTemplate, ScheduledMessage } from "@/lib/types";
 
 export function MessagesPane() {
   const {
@@ -33,7 +35,10 @@ export function MessagesPane() {
   );
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(false);
-  const [now, setNow] = useState(Date.now());
+  const now = useNow();
+  const [updatingScheduledId, setUpdatingScheduledId] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     setPhysicianPhone(loadPhysicianPhonePreference());
@@ -44,11 +49,6 @@ export function MessagesPane() {
       setPhysicianPhone(formatPhoneDisplay(campaign.physicianPhone));
     }
   }, [campaign?.id, campaign?.physicianPhone]);
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
 
   function handlePhysicianPhoneChange(value: string) {
     const formatted = formatPhoneInput(value);
@@ -93,6 +93,33 @@ export function MessagesPane() {
       setError(err instanceof Error ? err.message : "Failed to start");
     } finally {
       setStarting(false);
+    }
+  }
+
+  async function toggleScheduledResponse(
+    scheduled: ScheduledMessage,
+    expectsResponse: boolean
+  ) {
+    if (!campaign || campaign.status !== "ACTIVE") return;
+    setUpdatingScheduledId(scheduled.id);
+    try {
+      const res = await api<{ scheduled: ScheduledMessage }>(
+        `/scheduled-messages/${scheduled.id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ expectsResponse }),
+        }
+      );
+      setCampaign({
+        ...campaign,
+        scheduled: (campaign.scheduled ?? []).map((s) =>
+          s.id === scheduled.id ? res.scheduled : s
+        ),
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update message");
+    } finally {
+      setUpdatingScheduledId(null);
     }
   }
 
@@ -184,10 +211,31 @@ export function MessagesPane() {
             </select>
           </div>
 
-          {selectedTemplate && (
-            <p className="mt-2 text-xs text-slate-500">
-              {selectedTemplate.messages.length} scheduled message(s) in template
-            </p>
+          {selectedTemplate && !campaign && (
+            <div className="mt-4 max-w-2xl">
+              <p className="text-xs font-medium text-slate-600">
+                Template preview ({selectedTemplate.messages.length} message
+                {selectedTemplate.messages.length === 1 ? "" : "s"})
+              </p>
+              <ul className="mt-2 space-y-2">
+                {selectedTemplate.messages.map((m, i) => (
+                  <li
+                    key={i}
+                    className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                  >
+                    <ResponseExpectedToggle
+                      checked={m.expectsResponse !== false}
+                      readOnly
+                      compact
+                    />
+                    <span className="min-w-0 flex-1 text-slate-800">{m.body}</span>
+                    <span className="shrink-0 text-xs text-slate-400">
+                      {m.expectsResponse !== false ? "Replies on" : "No replies"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
 
           <div className="mt-4 flex flex-wrap gap-2">
@@ -224,20 +272,47 @@ export function MessagesPane() {
                 Open <strong>Threads</strong> to see this campaign in the active
                 tree.
               </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Use the checkbox to allow or block patient replies for each
+                message.
+              </p>
               <ul className="mt-3 space-y-2">
                 {(campaign.scheduled ?? []).map((s) => {
-                  const remaining = new Date(s.sendAt).getTime() - now;
+                  const remaining =
+                    now === null ? 0 : new Date(s.sendAt).getTime() - now;
+                  const expectsResponse = s.expectsResponse !== false;
                   return (
                     <li
                       key={s.id}
                       className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
                     >
-                      <p className="font-medium text-slate-800">{s.body}</p>
-                      <p className="text-xs text-slate-500">
-                        {s.status === "SENT"
-                          ? "Sent"
-                          : formatCountdown(remaining)}
-                      </p>
+                      <div className="flex items-start gap-2">
+                        <p className="min-w-0 flex-1 font-medium text-slate-800">
+                          {s.body}
+                        </p>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <ResponseExpectedToggle
+                            checked={expectsResponse}
+                            disabled={updatingScheduledId === s.id}
+                            compact
+                            onChange={(next) =>
+                              toggleScheduledResponse(s, next)
+                            }
+                          />
+                          <span className="min-w-[4.5rem] text-right text-xs text-slate-500">
+                            {s.status === "SENT"
+                              ? "Sent"
+                              : now === null
+                                ? "…"
+                                : formatCountdown(remaining)}
+                          </span>
+                        </div>
+                      </div>
+                      {!expectsResponse && (
+                        <p className="mt-1 text-xs text-amber-700">
+                          No patient replies — auto-reply if they text back
+                        </p>
+                      )}
                     </li>
                   );
                 })}

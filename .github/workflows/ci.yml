@@ -53,6 +53,14 @@ jobs:
         working-directory: frontend
         run: npm run test:coverage
 
+      - name: Install Playwright browser
+        run: npx playwright install chromium --with-deps
+
+      - name: E2E tests
+        run: npm run test:e2e
+        env:
+          CI: "true"
+
       - name: Upload backend coverage
         if: always()
         uses: actions/upload-artifact@v4

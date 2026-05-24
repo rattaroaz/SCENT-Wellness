@@ -5,12 +5,14 @@ import { prisma } from "../lib/prisma";
 import { requireAuth } from "../lib/auth";
 import {
   DEFAULT_PHYSICIAN_PHONE,
-  formatPhysicianSmsBody,
   normalizePhone,
   phonesMatch,
 } from "../lib/physicianPhones";
 import { getLogger } from "../lib/logger";
 import { recordAudit } from "../lib/audit";
+import { DEFAULT_NO_REPLY_MESSAGE } from "../lib/smsDefaults";
+
+const APP_FROM = "SCENT-App";
 
 const log = getLogger("sms");
 
@@ -128,7 +130,10 @@ export async function smsRoutes(app: FastifyInstance) {
 
     const outbound = await prisma.simulatedSmsLog.findUnique({
       where: { id: parsed.data.outboundLogId },
-      include: { patient: true, campaign: true },
+      include: {
+        patient: true,
+        campaign: { include: { template: true } },
+      },
     });
 
     if (!outbound || !outbound.patient) {
@@ -136,32 +141,111 @@ export async function smsRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: "Outbound message not found" });
     }
 
+    if (outbound.direction !== SmsDirection.OUTBOUND) {
+      return reply.status(400).send({ error: "Can only reply to clinic messages" });
+    }
+
+    const existingReply = await prisma.simulatedSmsLog.findFirst({
+      where: {
+        replyToLogId: outbound.id,
+        direction: SmsDirection.INBOUND,
+      },
+    });
+    if (existingReply) {
+      return reply.status(409).send({
+        error: "A reply was already recorded for this message",
+      });
+    }
+
     const patient = outbound.patient;
+    const questionMessage = outbound.questionMessage ?? outbound.body;
+    const patientAnswer = parsed.data.answer.trim();
+
+    if (!outbound.expectsResponse) {
+      const autoReplyBody =
+        outbound.campaign?.template?.noReplyMessage?.trim() ||
+        DEFAULT_NO_REPLY_MESSAGE;
+
+      const result = await prisma.$transaction(async (tx) => {
+        const inbound = await tx.simulatedSmsLog.create({
+          data: {
+            direction: SmsDirection.INBOUND,
+            fromNumber: patient.cellPhone,
+            toNumber: APP_FROM,
+            body: patientAnswer,
+            patientId: patient.id,
+            campaignId: outbound.campaignId,
+            replyToLogId: outbound.id,
+            questionMessage,
+            expectsResponse: false,
+          },
+        });
+
+        const autoReply = await tx.simulatedSmsLog.create({
+          data: {
+            direction: SmsDirection.OUTBOUND,
+            fromNumber: APP_FROM,
+            toNumber: patient.cellPhone,
+            body: autoReplyBody,
+            patientId: patient.id,
+            campaignId: outbound.campaignId,
+            expectsResponse: false,
+            questionMessage: autoReplyBody,
+          },
+        });
+
+        return { inbound, autoReply, forwarded: false as const };
+      });
+
+      await recordAudit({
+        userId: user.id,
+        action: "sms.reply",
+        resource: "sms",
+        resourceId: outbound.id,
+        reqId: request.id,
+        metadata: {
+          patientId: patient.id,
+          campaignId: outbound.campaignId,
+          expectsResponse: false,
+          autoReply: true,
+        },
+      });
+
+      log.info(
+        {
+          userId: user.id,
+          patientId: patient.id,
+          outboundLogId: outbound.id,
+        },
+        "patient reply to non-response message; auto-reply sent"
+      );
+
+      return result;
+    }
+
     const targetPhone = normalizePhone(
       outbound.campaign?.physicianPhone || DEFAULT_PHYSICIAN_PHONE
     );
-    const questionMessage = outbound.questionMessage ?? outbound.body;
     const forwardPayload = {
       lastName: patient.lastName,
       firstName: patient.firstName,
       dateOfBirth: patient.dateOfBirth,
       mrn: patient.mrn,
       questionMessage,
-      patientAnswer: parsed.data.answer,
+      patientAnswer,
     };
-    const smsBody = formatPhysicianSmsBody(forwardPayload);
-
     const result = await prisma.$transaction(async (tx) => {
       const inbound = await tx.simulatedSmsLog.create({
         data: {
           direction: SmsDirection.INBOUND,
           fromNumber: patient.cellPhone,
           toNumber: targetPhone,
-          body: smsBody,
+          body: patientAnswer,
           patientId: patient.id,
           campaignId: outbound.campaignId,
           replyToLogId: outbound.id,
           questionMessage,
+          expectsResponse: true,
         },
       });
 
@@ -173,7 +257,7 @@ export async function smsRoutes(app: FastifyInstance) {
         },
       });
 
-      return { inbound, forward };
+      return { inbound, forward, forwarded: true as const };
     });
 
     await recordAudit({
@@ -181,10 +265,12 @@ export async function smsRoutes(app: FastifyInstance) {
       action: "sms.reply",
       resource: "sms",
       resourceId: outbound.id,
+      reqId: request.id,
       metadata: {
         patientId: patient.id,
         campaignId: outbound.campaignId,
         physicianPhone: targetPhone,
+        expectsResponse: true,
       },
     });
 
@@ -199,5 +285,54 @@ export async function smsRoutes(app: FastifyInstance) {
     );
 
     return result;
+  });
+
+  app.post("/sms/simulate/clear", async (request) => {
+    const user = requireAuth(request);
+    const patientId = (request.query as { patientId?: string }).patientId;
+
+    const cleared = await prisma.$transaction(async (tx) => {
+      if (patientId) {
+        const patient = await tx.patient.findUnique({ where: { id: patientId } });
+        const logIds = (
+          await tx.simulatedSmsLog.findMany({
+            where: { patientId },
+            select: { id: true },
+          })
+        ).map((l) => l.id);
+        const forwardWhere = patient
+          ? {
+              OR: [
+                ...(logIds.length > 0
+                  ? [{ inboundLogId: { in: logIds } as const }]
+                  : []),
+                { mrn: patient.mrn },
+              ],
+            }
+          : logIds.length > 0
+            ? { inboundLogId: { in: logIds } }
+            : { id: { in: [] as string[] } };
+        const forwards = await tx.physicianForwardEntry.deleteMany({
+          where: forwardWhere,
+        });
+        const logs = await tx.simulatedSmsLog.deleteMany({ where: { patientId } });
+        return { logs: logs.count, forwards: forwards.count };
+      }
+      const forwards = await tx.physicianForwardEntry.deleteMany();
+      const logs = await tx.simulatedSmsLog.deleteMany();
+      return { logs: logs.count, forwards: forwards.count };
+    });
+
+    await recordAudit({
+      userId: user.id,
+      action: "sms.simulator.clear",
+      resource: "sms",
+      resourceId: patientId,
+      reqId: request.id,
+      metadata: cleared,
+    });
+
+    log.info({ userId: user.id, patientId, ...cleared }, "simulator messages cleared");
+    return { ok: true, ...cleared };
   });
 }
