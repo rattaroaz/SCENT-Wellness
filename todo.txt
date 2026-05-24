@@ -20,49 +20,6 @@ closed ended questions.  yes or no.  if yes, send message to office.
 
 set algorithm for post op.  Sent in scheduled order. same day, day 1, day 2.
 
-1. Interactive Patient Care (IPC) Pathways
-Guided, personalized care pathways delivered via bedside TV, mobile, or web.
-
-Supports patient education, self‑management, and care plan adherence.
-
-2. Large Patient Education Content Library
-Extensive clinical education modules and multimedia content.
-
-Designed to improve comprehension and reduce readmissions.
-
-3. Digital Rounding & Surveys (GetWell Rounds+)
-Customizable rounding workflows.
-
-Real‑time patient feedback collection and service recovery tools.
-
-4. Automated Communication & Reminders
-Automated outreach for follow‑ups, care transitions, and appointment reminders.
-
-5. Telehealth & Virtual Care
-Integrated virtual visits and remote engagement capabilities.
-
-6. Deep EHR Integration
-Integrates with Epic, Cerner, MEDITECH, Allscripts, and more.
-
-Syncs patient data, orders, education, and care plans.
-
-7. Whole‑Health, Cross‑Continuum Engagement (Get Well 360)
-Supports inpatient, outpatient, community, and home‑based care.
-
-Includes population health management and member engagement for health plans.
-
-8. SmartRoom & Hospital Journey Manager
-In‑hospital digital experience: education, entertainment, care instructions, and service requests.
-
-End‑to‑end patient support from admission through discharge.
-
-9. Government & VA‑Specific Capabilities
-FedRAMP‑certified, GovCloud‑integrated.
-
-VistA integration for scheduling, pharmacy info, diet selection, pain management, etc.
-
-10. Pediatric Solutions
-Age‑appropriate education, anxiety‑reducing content, and caregiver tools.
 
 
 create a roadmap.txt file and document in it all the needed steps to create the following app.  
@@ -82,6 +39,3 @@ In the lower pane, that is the sms text simulator, and will be separated in 2 pa
 in the right lower panel, the system will emulate the receipt of the patient message to the physician number.
 When the patient replies, the system will automatically add the patient last name, first name, date of birth, mrn, the message to which the patient replied and finally the patient answer.
 
-web app vs desktop
-platform to use
-steps to use
